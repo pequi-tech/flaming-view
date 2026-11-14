@@ -3,9 +3,9 @@ import os, tempfile, time, unittest
 from pathlib import Path
 from fastapi.testclient import TestClient
 
-from app.api import create_app
+from app.main import create_app
 
-REL = os.environ.get('FV_RELEASE', str(Path(__file__).resolve().parents[2] / 'serving' / 'release'))
+REL = os.environ.get('FV_RELEASE', str(Path(__file__).resolve().parents[3] / 'serving' / 'release'))
 MAX_MS = 500                                         # meta por requisição sem cache, numa máquina de dev
 
 

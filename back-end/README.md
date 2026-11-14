@@ -6,7 +6,7 @@ e o mês corrente em tempo real (FIRMS NRT). FastAPI + DuckDB direto nos Parquet
 ```
 pip install -r requirements.txt
 make run              # http://localhost:8000  ·  docs interativas em /docs
-make test             # 36 testes: domínio, API (release sintética + FIRMS falso), release real
+make test             # 42 testes: domínio, API (release sintética + FIRMS falso), release real, arquitetura
 ```
 
 | Variável | Padrão | Para quê |
@@ -37,17 +37,53 @@ Nível do mês: `critico` ≥ p90 do mesmo mês na área; `alto` ≥ p75; `baixo
 Exemplo: `GET /calendar?bbox=-58,-22,-54,-16&from_year=2024&to_year=2024`, junho:
 `{"value": 9510, "median": 837, "ratio": 11.36, "level": "critico", "source": "SNPP", "estimated": false, ...}`
 
-## Arquitetura (DDD, uma camada por arquivo)
+## Arquitetura (DDD, atomizada)
 
 ```
-app/domain.py    regras puras: BBox (validação, antimeridiano, células que tocam a caixa), climatologia
-                 (ano sem linha = 0), nível, projeção do mês corrente
-app/service.py   casos de uso: calendar, series, cells, current, method
-app/infra.py     Release: DuckDB sobre os Parquet do manifest; recusa subir se arquivo/contrato não batem
-                 Firms: API de área NRT em janelas de 5 dias, mesmos filtros do pipeline (infra/aggregate.py)
-                 Cache: SQLite chave-valor; serve o último snapshot (stale=true) se o FIRMS cair
-app/api.py       FastAPI: validação (422), 503 sem tempo real, gzip, CORS, Cache-Control
+app/
+├─ main.py                 raiz de composição: infra -> services -> controllers -> routes
+├─ config.py               configuração do ambiente (lida ao criar o app)
+├─ domain/                 regras puras, sem IO nem framework
+│  ├─ area.py              BBox: validação, antimeridiano, células que tocam a caixa
+│  ├─ years.py             período dentro do arquivo
+│  ├─ climatology.py       p25/mediana/p75/p90 do mês (ano sem linha = 0) e nível
+│  ├─ calendar.py          matriz ano × mês e totais anuais
+│  ├─ projection.py        mês corrente -> mês inteiro
+│  ├─ units.py             unidade dos valores
+│  └─ errors.py            InvalidArea, YearsOutOfRange, RealtimeUnavailable
+├─ infra/                  mundo externo
+│  ├─ release.py           DuckDB sobre os Parquet; recusa subir se arquivo/contrato não batem
+│  ├─ firms.py             FIRMS NRT: janelas de 5 dias em paralelo, filtros do infra/aggregate.py
+│  └─ cache.py             SQLite chave-valor; último snapshot se a fonte cair
+├─ services/               casos de uso (um por arquivo)
+│  ├─ calendar_service.py  calendário e série
+│  ├─ map_service.py       células do globo
+│  ├─ realtime_service.py  mês corrente
+│  └─ system_service.py    saúde e método
+├─ controllers/            HTTP <-> domínio: converte entrada, escolhe JSON/CSV, cache HTTP
+│  ├─ *_controller.py
+│  ├─ responses.py         json_ok, csv_download, política de Cache-Control
+│  └─ errors.py            erro de negócio -> 422 / 503
+└─ routes/                 só declara rotas e parâmetros (OpenAPI) e delega ao controller
+   ├─ *_routes.py
+   └─ params.py
+tests/
+├─ domain/                 uma suíte por módulo de domínio
+├─ api/                    uma suíte por grupo de rotas (release sintética + FIRMS falso)
+├─ integration/            release real: eventos conhecidos e metas de latência
+├─ fixtures.py             release mínima com o contrato real, FIRMS falso, caso base
+└─ test_architecture.py    fronteiras entre camadas e tamanho dos arquivos
 ```
+
+Regras de dependência, verificadas pelo `test_architecture.py`:
+
+| Camada | Não pode importar |
+|---|---|
+| domain | infra, services, controllers, routes, fastapi, duckdb, pandas, sqlite3, urllib |
+| infra | services, controllers, routes, fastapi |
+| services | controllers, routes, fastapi |
+| controllers | infra, routes |
+| routes | services, infra, domain |
 
 ## Desempenho (release real, 47,6 M linhas, máquina de dev)
 
