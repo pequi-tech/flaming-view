@@ -1,0 +1,30 @@
+{
+ "holdout_years": [
+  2020,
+  2021
+ ],
+ "calibration_years": [
+  2013,
+  2019
+ ],
+ "mape_total_monthly_pct": 4.7,
+ "r2_cell2_month": 0.96,
+ "mdape_cell2_month_pct": 14.4,
+ "n_cell2_months": 10447,
+ "level_share": {
+  "c2": 0.982,
+  "c10": 0.017,
+  "band": 0.002
+ },
+ "q10_q90_pred_over_actual": [
+  0.714,
+  1.324
+ ],
+ "aqua_snpp_global_median": 0.227,
+ "n20_snpp_global_median": 1.011,
+ "grid_rows": 47572044,
+ "years": [
+  2003,
+  2025
+ ]
+}
