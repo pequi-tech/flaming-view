@@ -6,7 +6,7 @@ e o mês corrente em tempo real (FIRMS NRT). FastAPI + DuckDB direto nos Parquet
 ```
 pip install -r requirements.txt
 make run              # http://localhost:8000  ·  docs interativas em /docs
-make test             # 35 testes: domínio, API (release sintética + FIRMS falso), release real
+make test             # 36 testes: domínio, API (release sintética + FIRMS falso), release real
 ```
 
 | Variável | Padrão | Para quê |
@@ -60,11 +60,26 @@ app/api.py       FastAPI: validação (422), 503 sem tempo real, gzip, CORS, Cac
 
 O arquivo histórico não usa cache no servidor: o DuckDB lê só os row groups da caixa, e a release é imutável.
 As respostas saem com `Cache-Control: max-age=86400` (`/current`: 300 s), então navegador e CDN seguram.
-O SQLite só cacheia o FIRMS (TTL 1 h), que é lento, tem limite de requisições e cai.
+
+O SQLite só cacheia o FIRMS, que é lento, tem limite de requisições e cai. O mês corrente é buscado em janelas
+de 5 dias, em paralelo. As janelas dos últimos 2 dias valem 1 h no cache; as anteriores valem 7 dias, porque
+já não mudam no NRT.
+
+`/current` medido com o FIRMS real (14/11/2026):
+
+| Área | 1ª chamada | com cache |
+|---|---|---|
+| Pantanal | ~1 s | ~25 ms |
+| Brasil | ~3 s | ~170 ms |
+| Chukotka (cruza o antimeridiano) | ~1 s | ~20 ms |
+| Austrália SE | 3–6 s (variação do FIRMS) | ~35 ms |
+
+Rodar com tempo real: `FIRMS_MAP_KEY=<sua chave> make run`. A chave fica só no ambiente: não vai para
+código, git, logs nem para a chave do cache.
 
 ## Fora do MVP (de propósito)
 
 - Polígono exato de país: a área é a bbox que o front já calcula. Países com fronteira irregular incluem vizinhos na borda.
 - Autenticação e rate limit: API só de leitura, sem dado sensível.
-- Calibração NOAA-21: tratado como S-NPP (o elo NOAA-20/S-NPP medido é 1,01).
+- Calibração NOAA-21: tratado como S-NPP (o elo NOAA-20/S-NPP medido é 1,01). O FIRMS já tem `VIIRS_NOAA21_SP` de 03/2023 a 07/2026, então dá para calibrar quando precisar.
 - Fontes estáticas no tempo real: o NRT do FIRMS não traz `type`, então chamas de gás e indústria entram no `/current`.

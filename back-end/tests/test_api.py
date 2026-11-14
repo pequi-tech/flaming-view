@@ -174,6 +174,13 @@ class TestTempoReal(Base):
         other.get('/current', params={'bbox': PANTANAL})
         self.assertEqual(len(self.firms.calls), 2)
 
+    def test_janelas_fechadas_ficam_no_cache(self):
+        """Dias 1-5 já não mudam no NRT: mesmo com TTL zero, só a janela recente (6-10) volta ao FIRMS."""
+        self.client.get('/current', params={'bbox': PANTANAL})
+        self.make_client(cache_ttl=0).get('/current', params={'bbox': PANTANAL})
+        self.assertEqual(len(self.firms.calls), 3)
+        self.assertTrue(self.firms.calls[-1].endswith('/5/2014-08-06'))
+
     def test_firms_fora_do_ar_usa_ultimo_snapshot(self):
         self.client.get('/current', params={'bbox': PANTANAL})
         self.firms.fail = True

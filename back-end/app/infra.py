@@ -1,5 +1,6 @@
 """Infraestrutura: release (DuckDB sobre Parquet), FIRMS tempo real e cache SQLite."""
-import io, json, sqlite3, sys, threading, time, urllib.request
+import datetime as dt, io, json, sqlite3, sys, threading, time, urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 import duckdb
@@ -121,11 +122,13 @@ class Firms:
     def __init__(self, map_key, cache: Cache, fetch=http_get, ttl=3600):
         self.key, self.cache, self.fetch, self.ttl = map_key, cache, fetch, ttl
 
-    def _window(self, area, start, days):
+    CLOSED_TTL = 7 * 86400                            # dias com mais de 2 dias já não mudam no NRT
+
+    def _window(self, area, start, days, ttl):
         """CSV de uma janela. Devolve (texto, veio_de_snapshot_vencido)."""
         path = f'{self.SOURCE}/{area}/{days}/{start.isoformat()}'
         hit = self.cache.get(path)                    # chave sem a MAP_KEY
-        if hit and time.time() - hit[1] < self.ttl:
+        if hit and time.time() - hit[1] < ttl:
             return hit[0], False
         try:
             text = self.fetch(f'{self.BASE}/{self.key}/{path}')
@@ -142,16 +145,19 @@ class Firms:
         """Células-dia (mesma regra do pipeline) entre first e last, dentro da caixa. Devolve (total, algum_snapshot_vencido)."""
         if not self.key:
             raise FirmsUnavailable('FIRMS_MAP_KEY não configurada')
-        frames, stale = [], False
+        windows = []
         for w, e in bbox.lon_ranges():
             area = f'{w:g},{bbox.s:g},{e:g},{bbox.n:g}'
             day = first
             while day <= last:
                 days = min(self.MAX_DAYS, (last - day).days + 1)
-                text, s = self._window(area, day, days)
-                stale |= s
-                frames.append(pd.read_csv(io.StringIO(text)))
-                day += pd.Timedelta(days=days).to_pytimedelta()
+                end = day + dt.timedelta(days=days - 1)
+                windows.append((area, day, days, self.CLOSED_TTL if (last - end).days > 2 else self.ttl))
+                day = end + dt.timedelta(days=1)
+        with ThreadPoolExecutor(min(8, len(windows))) as ex:      # janelas em paralelo: 1ª chamada = janela mais lenta
+            results = list(ex.map(lambda a: self._window(*a), windows))
+        stale = any(s for _, s in results)
+        frames = [pd.read_csv(io.StringIO(t)) for t, _ in results]
         d = pd.concat(frames)
         if d.empty:
             return 0, stale
