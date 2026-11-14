@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
-import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 maplibregl.setWorkerUrl(workerUrl);
 
 type FC = { type: "FeatureCollection"; features: { type: "Feature"; properties: any; geometry: any }[] };
+type BBox = [west: number, south: number, east: number, north: number];
 type Country = { NAME_PT: string; NAME: string; CONTINENT: string; POP_EST: number; TYPE: string; ADM0_A3: string };
 
 const GIBS = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best";
@@ -23,9 +24,17 @@ const contColor: any = ["match", ["get", "CONTINENT"], ...ORDER.flatMap((k) => [
 const raster = (id: string, tiles: string, maxzoom: number, attribution = "NASA GIBS") =>
   ({ id, source: { type: "raster" as const, tiles: [tiles], tileSize: 256, maxzoom, attribution } });
 
-const bboxOf = (coords: any, b = [180, 90, -180, -90]): number[] => {
-  if (typeof coords[0] === "number") return [Math.min(b[0], coords[0]), Math.min(b[1], coords[1]), Math.max(b[2], coords[0]), Math.max(b[3], coords[1])];
-  return coords.reduce((acc: number[], c: any) => bboxOf(c, acc), b);
+// wrap: negative longitudes get +360, so shapes that cross the antimeridian form one contiguous range (east may exceed 180).
+const bboxOf = (coords: any, b: BBox = [180, 90, -180, -90], wrap = false): BBox => {
+  if (typeof coords[0] === "number") {
+    const x = wrap && coords[0] < 0 ? coords[0] + 360 : coords[0];
+    return [Math.min(b[0], x), Math.min(b[1], coords[1]), Math.max(b[2], x), Math.max(b[3], coords[1])];
+  }
+  return coords.reduce((acc: BBox, c: any) => bboxOf(c, acc, wrap), b);
+};
+const countryBounds = (g: any): BBox => {
+  const b = bboxOf(g.coordinates);
+  return b[2] - b[0] > 180 ? bboxOf(g.coordinates, undefined, true) : b;
 };
 const bigPoly = (g: any) => (g.type === "Polygon" ? g.coordinates : g.coordinates.reduce((a: any, p: any) => (bboxArea(p) > bboxArea(a) ? p : a)));
 const bboxArea = (p: any) => { const b = bboxOf(p); return (b[2] - b[0]) * (b[3] - b[1]); };
@@ -49,12 +58,12 @@ export default function Globe() {
   const [data, setData] = useState<FC>();
   const [on, setOn] = useState<Record<LayerKey, boolean>>({ sat: true, day: false, night: false, fire: true, bnd: true, lab: true, pop: false });
   const [region, setRegion] = useState("World");
-  const [sel, setSel] = useState<{ p: Country; bbox: number[] }>();
+  const [sel, setSel] = useState<{ p: Country; bbox: BBox }>();
   const [pitch3d, setPitch3d] = useState(false);
   const [open, setOpen] = useState({ layers: true, reg: true });
   const [ready, setReady] = useState(false);
   const [q, setQ] = useState("");
-  const [hi, setHi] = useState(0);
+  const [activeHit, setActiveHit] = useState(0);
   const [focus, setFocus] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
@@ -98,9 +107,9 @@ export default function Globe() {
       if (!f) return;
       const p = f.properties as Country;
       const full = data.features.find((x) => (x.properties as Country).ADM0_A3 === p.ADM0_A3)!;
-      setSel({ p: full.properties as Country, bbox: bboxOf((full.geometry as any).coordinates) });
+      setSel({ p: full.properties as Country, bbox: countryBounds(full.geometry) });
     });
-    m.on("mousemove", (e) => { if (coord.current) coord.current.textContent = `${e.lngLat.lat.toFixed(1)}° N, ${e.lngLat.lng.toFixed(1)}° E`; });
+    m.on("mousemove", (e) => { const lng = e.lngLat.wrap().lng; if (coord.current) coord.current.textContent = `${Math.abs(e.lngLat.lat).toFixed(1)}° ${e.lngLat.lat < 0 ? "S" : "N"}, ${Math.abs(lng).toFixed(1)}° ${lng < 0 ? "W" : "E"}`; });
     return () => m.remove();
   }, [data]);
 
@@ -116,7 +125,7 @@ export default function Globe() {
     if (sel) { const b = sel.bbox; m.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 80, duration: 1200, maxZoom: 6 }); }
   }, [sel, ready]);
 
-  const pickCountry = (f: FC["features"][number]) => { setSel({ p: f.properties, bbox: bboxOf(f.geometry.coordinates) }); setQ(""); input.current?.blur(); };
+  const pickCountry = (f: FC["features"][number]) => { setSel({ p: f.properties, bbox: countryBounds(f.geometry) }); setQ(""); input.current?.blur(); };
   // ponytail: busca só em países e coordenadas. Dados futuros entram como novas fontes aqui dentro.
   const hits: Hit[] = useMemo(() => {
     const t = q.trim();
@@ -135,16 +144,16 @@ export default function Globe() {
       .slice(0, 6)
       .map(({ f }) => ({ key: f.properties.ADM0_A3, label: f.properties.NAME_PT ?? f.properties.NAME, sub: CONT[f.properties.CONTINENT]?.pt ?? f.properties.CONTINENT, go: () => pickCountry(f) }));
   }, [q, data]);
-  useEffect(() => setHi(0), [q]);
+  useEffect(() => setActiveHit(0), [q]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "/" && document.activeElement?.tagName !== "INPUT") { e.preventDefault(); input.current?.focus(); } };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []);
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setHi((hi + 1) % Math.max(1, hits.length)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setHi((hi + hits.length - 1) % Math.max(1, hits.length)); }
-    else if (e.key === "Enter") hits[hi]?.go();
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveHit((activeHit + 1) % Math.max(1, hits.length)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveHit((activeHit + hits.length - 1) % Math.max(1, hits.length)); }
+    else if (e.key === "Enter") hits[activeHit]?.go();
     else if (e.key === "Escape") { setQ(""); input.current?.blur(); }
   };
 
@@ -166,12 +175,12 @@ export default function Globe() {
       <div className="gx-hero">
         <span className="gx-logo" aria-hidden>◐</span>
         <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey} onFocus={() => setFocus(true)} onBlur={() => setTimeout(() => setFocus(false), 120)}
-          placeholder="Pesquisar países ou coordenadas (ex.: -15.8, -47.9)" role="combobox" aria-expanded={focus && hits.length > 0} aria-controls="gx-hits" aria-autocomplete="list" aria-label="Pesquisar" />
+          placeholder="Pesquisar países ou coordenadas (ex.: -15.8, -47.9)" role="combobox" aria-expanded={focus && hits.length > 0} aria-controls="gx-hits" aria-autocomplete="list" aria-activedescendant={focus && hits[activeHit] ? `gx-hit-${activeHit}` : undefined} aria-label="Pesquisar" />
         <kbd aria-hidden>/</kbd>
         {focus && q.trim() && (
           <ul id="gx-hits" role="listbox" className="gx-hits">
             {hits.length ? hits.map((h, i) => (
-              <li key={h.key} role="option" aria-selected={i === hi} className={i === hi ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); h.go(); }} onMouseEnter={() => setHi(i)}>
+              <li key={h.key} id={`gx-hit-${i}`} role="option" aria-selected={i === activeHit} className={i === activeHit ? "on" : ""} onMouseDown={(e) => { e.preventDefault(); h.go(); }} onMouseEnter={() => setActiveHit(i)}>
                 <b>{h.label}</b><small>{h.sub}</small></li>)) : <li className="none">Nada encontrado</li>}
           </ul>)}
       </div>
