@@ -1,0 +1,6 @@
+# dados gerados: reproduza com `make` (infra) e `make publish` (serving)
+infra/data/
+serving/release/
+__pycache__/
+*.pyc
+.DS_Store
