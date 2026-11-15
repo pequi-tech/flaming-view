@@ -15,7 +15,7 @@ from pathlib import Path
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONTRACT = json.loads(Path(os.path.join(HERE, 'contract.json')).read_text())
 GRID, FACTORS = CONTRACT['datasets']['grid'], CONTRACT['datasets']['factors']
-MODEL = {k: CONTRACT['datasets'][k] for k in ('predictions', 'territory', 'areas')}
+MODEL = {k: CONTRACT['datasets'][k] for k in ('predictions', 'territory', 'areas', 'drivers')}
 PARTIAL_COVERAGE = {2026: 'Brazil'}           # RD-01: 2026 só para o Brasil
 GATES = CONTRACT['quality_gates']
 ANTARCTICA = -60.0
@@ -152,7 +152,10 @@ def publish_model(model_dir, tmp):
         return []
     errs, frames = [], {}
     for name, spec in MODEL.items():
-        df = standardize_model(name, pd.read_parquet(os.path.join(model_dir, spec['path'])))
+        src = os.path.join(model_dir, spec['path'])
+        if spec.get('optional') and not os.path.exists(src):
+            continue
+        df = standardize_model(name, pd.read_parquet(src))
         errs += [f'{name}: {e}' for e in check_columns(df, spec)]
         df.to_parquet(os.path.join(tmp, spec['path']), index=False, row_group_size=200_000)
         frames[name] = df
