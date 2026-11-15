@@ -6,3 +6,7 @@ __pycache__/
 .DS_Store
 node_modules/
 dist/
+back-end/.venv/
+.spec
+# segredos locais (nunca versionar)
+.env
