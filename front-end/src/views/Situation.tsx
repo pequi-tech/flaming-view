@@ -13,7 +13,7 @@ export function Situation({ ctx }: { ctx: AppCtx }) {
   const yoy = h && h.last_year ? h.predicted / h.last_year - 1 : null;
   const unitName = (i: NonNullable<typeof p>["items"][number]) => i.name ?? t(`kind.${i.kind}`, { id: i.id.slice(-6) });
   return (
-    <aside ref={ref} className="pnl sit-panel" style={{ left: 12, top: 12, bottom: 12, width: 328, display: "flex", flexDirection: "column" }} aria-label={t("nav.sit")}>
+    <aside ref={ref} className="pnl sit-panel" style={{ left: 12, top: 12, bottom: 12, width: 372, display: "flex", flexDirection: "column" }} aria-label={t("nav.sit")}>
       <div style={{ padding: "16px 16px 10px" }}>
         <div className="lbl" data-a>{t("sit.label", { area: f?.area.name ?? "…" })}</div>
         <div className="h1" data-a>{cap(monthName(h?.forecast_month))}</div>

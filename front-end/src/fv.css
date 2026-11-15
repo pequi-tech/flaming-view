@@ -267,3 +267,12 @@ select.sel { height: 34px; padding: 0 10px; border: 1px solid var(--line); borde
   .rec { grid-template-columns: 3px 1fr; } .rec .a { grid-column: 2; align-items: flex-start; }
   .tabs { gap: 4px 14px; flex-wrap: wrap; }
 }
+
+/* all: unset volta o box-sizing para content-box: width 100% + padding estourava o painel */
+.pi, .btn, .tg, .seg button, .tabs button, .lang button { box-sizing: border-box; }
+.pi { width: 100%; } .pi > span { min-width: 0; } .pi .nm, .pi .mt { overflow: hidden; text-overflow: ellipsis; }
+.hz { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hz .card { min-width: 0; }
+.hz .chip { max-width: 100%; height: auto; min-height: 22px; white-space: normal; line-height: 1.2; padding-top: 2px; padding-bottom: 2px; }
+.kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpi { min-width: 0; }
+
+.ov-badge { overflow: hidden; white-space: nowrap; } .ov-badge > span:last-child { overflow: hidden; text-overflow: ellipsis; }   /* selo nunca invade o seletor */
