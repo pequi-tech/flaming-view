@@ -74,8 +74,9 @@ class ModelStore:
         return {r['area_id']: r['name'] for r in self.rows('SELECT area_id, name FROM areas WHERE list_contains(?, area_id)', [ids])} if ids else {}
 
     def forecast(self, where: str, params: list, h: int) -> list[dict]:
+        # recent = maioria das células: ilhas fora da caixa de 2026 (Trindade) não derrubam o Brasil inteiro
         return self.rows(f"""SELECT c{h} AS level, count(*) AS cells, sum(p{h}) AS predicted, sum(lo{h}) AS lo, sum(hi{h}) AS hi,
-            any_value(m{h}) AS forecast_month, bool_and(recent) AS recent, any_value(model_version) AS model_version
+            any_value(m{h}) AS forecast_month, avg(recent::INT) >= 0.5 AS recent, any_value(model_version) AS model_version
             FROM cp WHERE {where} GROUP BY ALL""", params)
 
     def cells(self, where: str, params: list, h: int, layer: str, h3_res: int | None) -> list[dict]:
