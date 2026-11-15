@@ -24,8 +24,15 @@ class ModelStore:
         cols = ', '.join(f"p{h}.class AS c{h}, {K.format(c=f'p{h}.class')} AS k{h}, p{h}.predicted AS p{h}, p{h}.lo AS lo{h}, "
                          f"p{h}.hi AS hi{h}, p{h}.n AS n{h}, p{h}.ratio AS r{h}, p{h}.forecast_month AS m{h}" for h in H)
         joins = ' '.join(f"JOIN read_parquet('{p('predictions.parquet')}') p{h} ON p{h}.cell_id = t.cell_id AND p{h}.horizon = {h}" for h in H)
-        self.db.execute(f"""CREATE TABLE cp AS SELECT t.*, {cols}, p1.recent_data AS recent, p1.model_version AS model_version
-                            FROM read_parquet('{p('territory.parquet')}') t {joins}""")
+        # fatores NASA POWER (opcionais): célula do modelo = canto SW em múltiplos de `res`
+        res = release.model_metrics.get('resolution_used', 0.5)
+        wx, wxjoin = 'NULL::FLOAT AS rain, NULL::FLOAT AS t2m, NULL::FLOAT AS rh2m, NULL::FLOAT AS wind, NULL::VARCHAR AS wx_months', ''
+        if 'drivers.parquet' in release.manifest['files']:
+            wx = 'd.rain, d.t2m, d.rh2m, d.wind, d.months AS wx_months'
+            wxjoin = (f"LEFT JOIN read_parquet('{p('drivers.parquet')}') d ON d.lat = round(floor(t.lat / {res}) * {res}, 3)"
+                      f" AND d.lon = round(floor(t.lon / {res}) * {res}, 3)")
+        self.db.execute(f"""CREATE TABLE cp AS SELECT t.*, {cols}, p1.recent_data AS recent, p1.model_version AS model_version, {wx}
+                            FROM read_parquet('{p('territory.parquet')}') t {joins} {wxjoin}""")
         self.db.execute('ALTER TABLE cp ADD COLUMN ipp1 FLOAT; ALTER TABLE cp ADD COLUMN ipp2 FLOAT; ALTER TABLE cp ADD COLUMN ipp3 FLOAT')
         self.db.execute(f"UPDATE cp SET {', '.join(f'ipp{h} = {ipp(h)}' for h in H)}")
         self.db.execute(f"CREATE TABLE areas AS SELECT * FROM read_parquet('{p('areas.parquet')}')")
@@ -93,7 +100,7 @@ class ModelStore:
         return self.rows(f"""SELECT {key}::VARCHAR AS id, max(ipp{h}) AS ipp, arg_max(n{h}, ipp{h}) AS n, arg_max(v, ipp{h}) AS v,
             arg_max(e, ipp{h}) AS e, sum(p{h}) AS predicted, count(*) AS cells, count_if(k{h} = 3) AS critical,
             max(k1) AS k1, max(k2) AS k2, max(k3) AS k3, bool_or(k1 >= 2 AND e >= 0.75) AS exposed_high,
-            bool_or(e_ti >= 1 AND greatest(k1, k2, k3) = 3) AS ti_critical, bool_or(v >= 0.75 AND k1 = 1) AS recurrent_normal,
+            bool_or(e_ti >= 1 AND greatest(k1, k2, k3) = 3) AS ti_critical, bool_or(v >= 0.75 AND k1 = 1) AS recurrent_normal, min(rain) AS rain,
             avg((k1 = 3)::INT) AS crit_share, any_value(ti_name) FILTER (WHERE ti_name IS NOT NULL) AS ti_name,
             avg(lat) + 0.025 AS lat, avg(lon) + 0.025 AS lon
             FROM cp WHERE {where} AND {key} IS NOT NULL GROUP BY 1""", params)
