@@ -74,6 +74,7 @@ export function Territory({ ctx }: { ctx: AppCtx }) {
             <div key={d.key} className={`card${d.available ? "" : " na"}`}>
               <div className="row between muted"><span>{t(`drv.${d.key}`)}</span><span>{d.importance !== null ? t("drv.imp", { v: num(d.importance, 2) }) : ""}</span></div>
               <div className="v num">{!d.available || d.value === null ? "—" : d.unit === "ratio" ? `${d.value > 0 ? "+" : ""}${num(d.value * 100)} %` : `${d.value > 0 ? "+" : ""}${num(d.value, 1)} ${d.unit}`}</div>
+              {d.months && <div className="muted">{d.months.replace("..", " a ")}</div>}
               {d.available ? <div className="imp"><i style={{ "--w": `${Math.min(100, (d.importance ?? 0) * 100)}%` } as React.CSSProperties} /></div> : <div className="muted">{t("drv.na")}</div>}
             </div>))}</div>
         </div>
