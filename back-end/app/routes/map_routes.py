@@ -1,13 +1,18 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Query
 
 from ..controllers.map_controller import MapController
+from ..controllers.input_dto import CellsQueryDTO
+from ..controllers.output_dto import CellsResponseDTO, ERROR_RESPONSES
 
 
 def map_routes(c: MapController) -> APIRouter:
     r = APIRouter(tags=['globo'])
 
-    @r.get('/cells', summary='Atividade de um mês agregada em células (camada do globo)')
-    def cells(year: int, month: int = Query(..., ge=1, le=12), res: float = 1.0, bbox: str | None = None):
-        return c.cells(year, month, res, bbox)
+    @r.get('/cells', summary='Atividade de um mês agregada em células (camada do globo)',
+           response_model=CellsResponseDTO, responses=ERROR_RESPONSES)
+    def cells(query: Annotated[CellsQueryDTO, Query()]):
+        return c.cells(query)
 
     return r
