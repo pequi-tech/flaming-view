@@ -22,6 +22,10 @@ class Release:
         self.db = duckdb.connect()
         self.db.execute(f"CREATE VIEW grid AS SELECT * FROM read_parquet({files!r})")
         self.years = list(range(self.manifest['years'][0], self.manifest['years'][1] + 1))
+        self.partial_years = self.manifest.get('partial_years', {})          # ex.: {'2026': {'coverage': 'Brazil'}}
+        self.baseline_years = [y for y in self.years if str(y) not in self.partial_years]
+        self.has_model = 'predictions.parquet' in self.manifest['files']
+        self.model_metrics = json.loads((self.path / 'model_metrics.json').read_text()) if self.has_model else {}
 
     def _check(self, verify_sha):
         m = self.manifest
@@ -49,9 +53,13 @@ class Release:
         sql = f"lat > ? AND lat < ? AND ({' OR '.join(['(lon > ? AND lon < ?)'] * len(lons))})"
         return sql, [lat0, lat1] + [v for w, e in lons for v in (w - 0.05, e)]
 
-    def monthly(self, bbox: BBox):
-        """{(ano, mês): soma} para valor, lo e hi, mais a fonte de cada ano."""
+    def monthly(self, bbox: BBox, cell_filter: tuple[str, list] | None = None):
+        """{(ano, mês): soma} para valor, lo e hi, mais a fonte de cada ano. `cell_filter` restringe às células de uma
+        área administrativa (SQL sobre a tabela `cp` do modelo); a caixa continua para podar os row groups."""
         where, params = self._where(bbox)
+        if cell_filter:
+            where += f' AND cell_id IN (SELECT cell_id FROM cp WHERE {cell_filter[0]})'
+            params = params + cell_filter[1]
         rows = self.db.cursor().execute(
             f"SELECT year, month, sum(activity), sum(activity_lo), sum(activity_hi), any_value(source::VARCHAR) "
             f"FROM grid WHERE {where} GROUP BY ALL", params).fetchall()

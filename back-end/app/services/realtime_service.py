@@ -24,7 +24,7 @@ class RealtimeService:
         value, stale = self.firms.cell_days(bbox, today.replace(day=1), today)
         # ponytail: NOAA-21 tratado como S-NPP (fator NOAA-20/S-NPP = 1,01 no pipeline). Calibrar com VIIRS_NOAA21_SP quando precisar.
         val, _, _, _ = self.release.monthly(bbox)
-        clim = climatology(val, self.release.years)[today.month]
+        clim = climatology(val, self.release.baseline_years)[today.month]
         projected = project(value, today.day, n_days)
         return {'area': str(bbox), 'unit': UNIT, 'year': today.year, 'month': today.month, 'day': today.day,
                 'days_in_month': n_days, 'value_to_date': value, 'projected': round(projected, 2),

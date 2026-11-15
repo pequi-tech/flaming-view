@@ -14,6 +14,7 @@ export const contColor: any = ["match", ["get", "CONTINENT"], ...ORDER.flatMap((
 
 export const LAYERS = [
   ["sat", "Imagem de satélite"], ["day", "Imagem diária (cor real)"], ["night", "Luzes noturnas"],
-  ["fire", "Focos de calor (NOAA-20)"], ["bnd", "Fronteiras políticas"], ["lab", "Rótulos (países)"], ["pop", "População (coroplético)"],
+  ["fire", "Focos recentes (NASA GIBS)"], ["history", "Atividade histórica (backend)"],
+  ["bnd", "Fronteiras políticas"], ["lab", "Rótulos (países)"], ["pop", "População (coroplético)"],
 ] as const;
 export type LayerKey = (typeof LAYERS)[number][0];

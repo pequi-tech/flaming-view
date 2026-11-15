@@ -3,6 +3,7 @@ import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { GIBS, LAYERS, contColor, fireDate, type LayerKey } from "./config";
 import { bboxOf, bigPoly, countryBounds, type Country, type FC, type Selected } from "./geo";
+import type { CellsResponseDTO } from "./api/dto";
 
 maplibregl.setWorkerUrl(workerUrl);
 
@@ -10,7 +11,7 @@ const raster = (id: string, tiles: string, maxzoom: number, attribution = "NASA 
   ({ id, source: { type: "raster" as const, tiles: [tiles], tileSize: 256, maxzoom, attribution } });
 
 /** Builds the globe once `data` is loaded; keeps layer visibility and the selected country in sync. */
-export function useGlobeMap(data: FC | undefined, on: Record<LayerKey, boolean>, sel: Selected | undefined, onSelect: (s: Selected) => void) {
+export function useGlobeMap(data: FC | undefined, on: Record<LayerKey, boolean>, sel: Selected | undefined, onSelect: (s: Selected) => void, fireCells?: CellsResponseDTO) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const coord = useRef<HTMLSpanElement>(null);
@@ -43,6 +44,12 @@ export function useGlobeMap(data: FC | undefined, on: Record<LayerKey, boolean>,
       m.addLayer({ id: "sel", type: "fill", source: "countries", filter: ["==", ["get", "ADM0_A3"], ""], paint: { "fill-color": "#ffffff", "fill-opacity": 0.18 } });
       m.addLayer({ id: "bnd", type: "line", source: "countries", paint: { "line-color": contColor, "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.8, 6, 2], "line-opacity": 0.95 } });
       add("fire", `${GIBS}/VIIRS_NOAA20_Thermal_Anomalies_375m_All/default/${fireDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`, 8);
+      m.addSource("history", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      m.addLayer({ id: "history", type: "circle", source: "history", paint: {
+        "circle-color": ["step", ["get", "value"], "#fde68a", 10, "#fbbf24", 100, "#f97316", 1000, "#ef4444", 10000, "#dc2626"],
+        "circle-radius": ["interpolate", ["linear"], ["get", "value"], 0, 3, 100, 6, 1000, 10, 10000, 14],
+        "circle-opacity": 0.82, "circle-stroke-color": "#fff7ed", "circle-stroke-opacity": 0.72, "circle-stroke-width": 0.8,
+      } });
       const pts: FC = { type: "FeatureCollection", features: data.features.map((f) => {
         const b = bboxOf(bigPoly(f.geometry)); return { type: "Feature", properties: f.properties, geometry: { type: "Point", coordinates: [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] } }; }) };
       m.addSource("labels", { type: "geojson", data: pts });
@@ -52,12 +59,28 @@ export function useGlobeMap(data: FC | undefined, on: Record<LayerKey, boolean>,
       setReady(true);
     });
     m.on("click", (e) => {
+      if (!m.getLayer("hit") || !m.getLayer("history")) return;
+      const fireFeature = m.queryRenderedFeatures(e.point, { layers: ["history"] })[0];
+      if (fireFeature) {
+        const value = Number(fireFeature.properties?.value ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+        const year = fireFeature.properties?.year;
+        const month = String(fireFeature.properties?.month ?? "").padStart(2, "0");
+        new maplibregl.Popup({ closeButton: true, maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<strong>Atividade agregada</strong><br/>${month}/${year}: ${value} células-dia equivalentes`)
+          .addTo(m);
+        return;
+      }
       const f = m.queryRenderedFeatures(e.point, { layers: ["hit"] })[0];
       if (!f) return;
       const full = data.features.find((x) => (x.properties as Country).ADM0_A3 === (f.properties as Country).ADM0_A3)!;
       select.current({ p: full.properties as Country, bbox: countryBounds(full.geometry) });
     });
     m.on("mousemove", (e) => {
+      if (m.getLayer("history")) {
+        const overCell = m.queryRenderedFeatures(e.point, { layers: ["history"] }).length > 0;
+        m.getCanvas().style.cursor = overCell ? "pointer" : "";
+      }
       const { lat, lng } = e.lngLat.wrap();
       if (coord.current) coord.current.textContent = `${Math.abs(lat).toFixed(1)}° ${lat < 0 ? "S" : "N"}, ${Math.abs(lng).toFixed(1)}° ${lng < 0 ? "W" : "E"}`;
     });
@@ -68,6 +91,19 @@ export function useGlobeMap(data: FC | undefined, on: Record<LayerKey, boolean>,
     const m = map.current; if (!m || !ready) return;
     for (const [k] of LAYERS) m.setLayoutProperty(k, "visibility", on[k] ? "visible" : "none");
   }, [on, ready]);
+
+  useEffect(() => {
+    const source = map.current?.getSource("history") as maplibregl.GeoJSONSource | undefined;
+    if (!source || !ready) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: (fireCells?.cells ?? []).map((cell) => ({
+        type: "Feature" as const,
+        properties: { ...cell, year: fireCells?.year, month: fireCells?.month },
+        geometry: { type: "Point" as const, coordinates: [cell.lon + (fireCells?.res ?? 1) / 2, cell.lat + (fireCells?.res ?? 1) / 2] },
+      })),
+    });
+  }, [fireCells, ready]);
 
   useEffect(() => {
     const m = map.current; if (!m || !ready) return;

@@ -62,11 +62,13 @@ app/
 │  └─ system_service.py    saúde e método
 ├─ controllers/            HTTP <-> domínio: converte entrada, escolhe JSON/CSV, cache HTTP
 │  ├─ *_controller.py
-│  ├─ responses.py         json_ok, csv_download, política de Cache-Control
-│  └─ errors.py            erro de negócio -> 422 / 503
+│  ├─ input_dto.py         schemas Pydantic para query params
+│  ├─ output_dto.py        schemas Pydantic para cada resposta e erro
+│  ├─ responses.py         valida DTOs, política de Cache-Control e CSV
+│  └─ errors.py            intercepta erros e serializa ErrorResponseDTO
 └─ routes/                 só declara rotas e parâmetros (OpenAPI) e delega ao controller
    ├─ *_routes.py
-   └─ params.py
+   └─ DTOs de query + response_model para cada rota
 tests/
 ├─ domain/                 uma suíte por módulo de domínio
 ├─ api/                    uma suíte por grupo de rotas (release sintética + FIRMS falso)
@@ -74,6 +76,10 @@ tests/
 ├─ fixtures.py             release mínima com o contrato real, FIRMS falso, caso base
 └─ test_architecture.py    fronteiras entre camadas e tamanho dos arquivos
 ```
+
+Todas as rotas JSON declaram `response_model` e validam o DTO antes de serializar. Erros de validação,
+domínio, HTTP e exceções inesperadas usam o mesmo formato `{"error":{"code","message","details?"}}`.
+Os parâmetros de query também são DTOs Pydantic com campos extras recusados e aparecem no OpenAPI.
 
 Regras de dependência, verificadas pelo `test_architecture.py`:
 
@@ -119,3 +125,22 @@ código, git, logs nem para a chave do cache.
 - Autenticação e rate limit: API só de leitura, sem dado sensível.
 - Calibração NOAA-21: tratado como S-NPP (o elo NOAA-20/S-NPP medido é 1,01). O FIRMS já tem `VIIRS_NOAA21_SP` de 03/2023 a 07/2026, então dá para calibrar quando precisar.
 - Fontes estáticas no tempo real: o NRT do FIRMS não traz `type`, então chamas de gás e indústria entram no `/current`.
+
+## Contrato 1.1 · previsão, prioridade e assistente
+
+A release passa a trazer `predictions.parquet`, `territory.parquet`, `areas.parquet`, `model_metrics.json` e `areas/*.geojson`
+(gerados por `make -C infra model` e publicados por `make -C serving publish`). No boot, `infra/model_store.py` junta previsão
+e território numa tabela em memória e calcula o IPP com os pesos de `domain/ipp_params.py` (não materializado).
+Release 1.0 continua subindo: as rotas novas respondem `503 model_unavailable`.
+
+| Rota | O que devolve |
+|---|---|
+| `GET /forecast?area_id=BR5218805[&horizon=1]` | classes previstas por horizonte, total com faixa, mediana do mês, ano anterior, métricas do modelo, breadcrumb |
+| `GET /cells?layer=forecast\|ipp\|history&horizon=1&shape=h3&h3_res=5&area_id=…` | camada do mapa em hexágonos H3 (ou `shape=square` com `bbox`) |
+| `GET /cell/{cell_id}` | lugar (município, UF, TI), previsão M+1..M+3, IPP com N/V/E e explicação, 24 meses, fatores, recomendações |
+| `GET /priorities?area_id=…&horizon=1&limit=20` | país/UF → municípios; município → células; fora do Brasil → hexágonos res 5 |
+| `GET /areas?q=rio ver` · `GET /areas/{id}/geometry` | busca sem acento e GeoJSON simplificado |
+| `POST /assistant` · `POST /assistant/report` | SSE (`data: {"text"}` … `data: [DONE]`); sem `ANTHROPIC_API_KEY` → `503 assistant_unavailable` |
+
+Regras R1–R8 em `domain/recommendations.py` (puras, um teste por regra). O LLM (`claude-opus-5`, `infra/llm.py`) só redige;
+o contexto enviado é a saída das próprias rotas, cortada em ~12 k tokens.

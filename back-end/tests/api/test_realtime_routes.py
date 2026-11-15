@@ -45,7 +45,9 @@ class TestRealtimeRoutes(ApiCase):
 
     def test_firms_fora_do_ar_sem_cache(self):
             self.firms.fail = True
-            self.assertEqual(self.client.get('/current', params={'bbox': PANTANAL}).status_code, 503)
+            r = self.client.get('/current', params={'bbox': PANTANAL})
+            self.assertEqual(r.status_code, 503)
+            self.assertEqual(r.json()['error']['code'], 'realtime_unavailable')
 
     def test_sem_chave(self):
             self.assertEqual(self.make_client(map_key=None).get('/current', params={'bbox': PANTANAL}).status_code, 503)

@@ -14,8 +14,8 @@ class CalendarService:
         years = year_range(self.release.years, from_year, to_year)
         val, lo, hi, src = self.release.monthly(bbox)
         return {'area': str(bbox), 'unit': UNIT, 'release': self.release.version,
-                'baseline_years': [self.release.years[0], self.release.years[-1]],
-                'months': calendar(val, lo, hi, src, years, self.release.years)}
+                'baseline_years': [self.release.baseline_years[0], self.release.baseline_years[-1]],
+                'months': calendar(val, lo, hi, src, years, self.release.baseline_years)}
 
     def series(self, bbox: BBox, from_year=None, to_year=None) -> dict:
         years = year_range(self.release.years, from_year, to_year)
