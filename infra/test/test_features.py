@@ -19,6 +19,12 @@ class TestSemVazamento(unittest.TestCase):
             B[:, t + 1:] = 1e6                        # futuro absurdo
             after = F.features_at(B, t, h, lat, clim, oni)
             self.assertTrue(before.equals(after), f'h={h} leu depois de t')
+            wxa = {v: rng.normal(size=A.shape).astype(np.float32) for v in F.WX}
+            fut = {v: m.copy() for v, m in wxa.items()}
+            for m in fut.values():
+                m[:, t:] = 1e6                        # POWER do próprio mês de emissão em diante
+            self.assertTrue(F.features_at(A, t, h, lat, clim, oni, wxa).equals(F.features_at(A, t, h, lat, clim, oni, fut)),
+                            f'h={h}: POWER leu o mês de emissão ou depois')
 
     def test_classe_segue_regra_do_back_end(self):
         clim = {'p25': np.array([[1.0]]), 'p75': np.array([[5.0]]), 'p90': np.array([[9.0]]), 'median': np.array([[3.0]])}

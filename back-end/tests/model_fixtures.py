@@ -42,9 +42,11 @@ def make_model_release(root):
     (v / 'areas' / 'municipalities.geojson').write_text(json.dumps(
         {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'properties': {'area_id': RV}, 'geometry': sq}]}))
     m = json.loads((v / 'manifest.json').read_text())
-    for f in ('territory.parquet', 'predictions.parquet', 'areas.parquet', 'model_metrics.json'):
+    pd.DataFrame({'lat': [-19.0], 'lon': [-56.0], 'rain': np.float32([-0.4]), 't2m': np.float32([1.2]),       # só a 1ª célula
+                  'rh2m': np.float32([-6.0]), 'wind': np.float32([0.1]), 'months': ['2014-05..2014-07']}).to_parquet(v / 'drivers.parquet')
+    for f in ('territory.parquet', 'predictions.parquet', 'areas.parquet', 'model_metrics.json', 'drivers.parquet'):
         m['files'][f] = {'bytes': (v / f).stat().st_size}
-    m['contract_version'] = '1.1.0'
+    m['contract_version'] = '1.2.0'
     (v / 'manifest.json').write_text(json.dumps(m))
     return [int(i) for i in ids]
 

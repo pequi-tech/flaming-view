@@ -102,3 +102,15 @@ class TestOrdemDoPlano(ModelApiCase):
         ipp = self.client.get('/priorities', params={'area_id': RV, 'sort': 'ipp', 'limit': 1}).json()
         self.assertEqual((ipp['sort'], len(ipp['items']), ipp['total']), ('ipp', 1, 2))
         self.assertEqual(self.client.get('/priorities', params={'area_id': RV, 'sort': 'x'}).status_code, 422)
+
+
+class TestNasaPower(ModelApiCase):
+    def test_fatores_e_regra_r4(self):
+        seca = self.client.get(f'/cell/{self.ids[0]}').json()
+        rain = next(d for d in seca['drivers'] if d['key'] == 'rain')
+        self.assertEqual((rain['available'], rain['value'], rain['months']), (True, -0.4, '2014-05..2014-07'))
+        self.assertIn('R4', [r['rule_id'] for r in seca['recommendations']])
+        sem = self.client.get(f'/cell/{self.ids[1]}').json()
+        self.assertFalse(next(d for d in sem['drivers'] if d['key'] == 'rain')['available'])
+        mun = self.client.get('/priorities', params={'area_id': 'BR52'}).json()['items'][0]
+        self.assertIn('R4', [r['rule_id'] for r in mun['recommendations']])

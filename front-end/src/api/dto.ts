@@ -77,7 +77,7 @@ export type PriorityItem = IppDTO & {
 };
 export type PrioritiesResponseDTO = { area: AreaRef; horizon: number; granularity: string; sort: string; total: number; release: string; cuts: Record<string, number>; items: PriorityItem[] };
 export type CellForecast = { horizon: number; forecast_month: string; level: Level; predicted: number; lo: number; hi: number; ratio: number; ipp: IppDTO };
-export type Driver = { key: string; value: number | null; unit: string; importance: number | null; available: boolean };
+export type Driver = { key: string; value: number | null; unit: string; importance: number | null; available: boolean; months?: string | null };
 export type CellResponseDTO = {
   cell_id: number; lat: number; lon: number; release: string; model_version: string; recent_data: boolean; issue_month: string;
   place: { country: string; country_name?: string; state_id?: string; state_name?: string; municipality_id?: string; municipality_name?: string; ti_name: string | null };
