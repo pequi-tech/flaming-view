@@ -17,7 +17,10 @@ data/agg/viirs-jpss1_2026_Brazil.csv.gz:          # precisa de FIRMS_MAP_KEY; de
 	$(PY) fetch_2026.py --out data/agg
 
 # Previsão (RD-04..06) e território (RD-07, RD-09). Entradas IBGE/TI em data/ext (ver territory.py).
-model: data/metrics.json data/ext/oni.ascii.txt
+data/ext/power_05.parquet:                        # NASA POWER mensal, América do Sul (~2 min)
+	$(PY) power.py --out $@
+
+model: data/metrics.json data/ext/oni.ascii.txt data/ext/power_05.parquet
 	$(PY) model.py data
 	$(PY) territory.py data ../front-end/public/data/countries.geojson
 
