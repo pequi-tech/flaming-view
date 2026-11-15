@@ -1,7 +1,7 @@
 {
   "name": "flaming-view-web",
   "private": true,
-  "description": "Flaming View: apoio à decisão preventiva contra incêndios (NASA Space Apps 2026). Uso de IA: partes do código foram geradas com auxílio do Claude (Anthropic), em fluxo Plan Mode + Spec-Driven Development com PRD em EARS.",
+  "description": "Flaming View: apoio à decisão preventiva contra incêndios (NASA Space Apps 2026). Uso de SI (Sistemas Inteligentes): partes do código foram geradas com auxílio do Claude (Anthropic), em fluxo Plan Mode + Spec-Driven Development com PRD em EARS.",
   "type": "module",
   "scripts": {
     "dev": "vite",

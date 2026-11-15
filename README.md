@@ -9,7 +9,7 @@ e terras indígenas e sugere ações preventivas que o gestor aceita ou ignora, 
 
 *Prever é o começo. Priorizar é o diferencial. Preparar-se antes é o impacto.*
 
-## Uso de IA
+## Uso de SI (Sistemas Inteligentes)
 
 Partes do código, da documentação e do processamento de dados deste projeto foram geradas com auxílio do
 **Claude (Anthropic)**, sempre revisadas e testadas pela equipe.
@@ -18,7 +18,7 @@ Partes do código, da documentação e do processamento de dados deste projeto f
   e a implementação, cada uma verificada contra a anterior.
 - **PRD:** requisitos escritos no modelo **EARS** (*Easy Approach to Requirements Syntax*), com prioridade
   (P0–P5) e critério de aceite verificável para cada um.
-- **Revisão:** agentes de IA simularam um especialista de UX/UI e um coordenador de Defesa Civil; os pareceres
+- **Revisão:** agentes de SI simularam um especialista de UX/UI e um coordenador de Defesa Civil; os pareceres
   viraram o backlog de ajustes.
 - **No produto:** o assistente usa o Claude (`claude-opus-5`) só para **redigir e explicar** números já
   calculados pela API. Ele não decide nem gera previsões; as recomendações vêm de regras fixas e auditáveis.
@@ -74,8 +74,40 @@ Testes: `make -C back-end test`, `make -C serving test`, `make -C infra test`, `
 
 ## Fontes de dados
 
-NASA FIRMS (MODIS, VIIRS S-NPP, NOAA-20) · NASA POWER · NOAA CPC ONI · GHSL POP 2025 (JRC) ·
-IBGE malhas e população 2024 · FUNAI terras indígenas (via TerraBrasilis/INPE) · Natural Earth · NASA GIBS.
+| Fonte | O que usamos | Acesso |
+|---|---|---|
+| **NASA FIRMS** · MODIS Collection 6.1 (Aqua/Terra) | focos de calor 2003–2025 para a série harmonizada | [arquivos anuais por país](https://firms.modaps.eosdis.nasa.gov/download/) |
+| **NASA FIRMS** · VIIRS 375 m S-NPP | referência da série (2012–2025) e calibração dos fatores | [FIRMS](https://firms.modaps.eosdis.nasa.gov/) |
+| **NASA FIRMS** · VIIRS 375 m NOAA-20 (SP e NRT) | 2026 do Brasil (jan–out) | [API de área FIRMS](https://firms.modaps.eosdis.nasa.gov/api/) |
+| **NASA FIRMS** · VIIRS 375 m NOAA-21 (NRT) | mês corrente em tempo real | [API de área FIRMS](https://firms.modaps.eosdis.nasa.gov/api/) |
+| **NASA POWER** (mensal, MERRA-2/IMERG) | chuva (PRECTOTCORR), temperatura (T2M), umidade (RH2M), vento (WS2M), América do Sul 2003–2026 | [NASA POWER](https://power.larc.nasa.gov/) · [docs](https://power.larc.nasa.gov/docs/) |
+| **NOAA CPC · ONI** (Oceanic Niño Index) | El Niño/La Niña como variável do modelo | [oni.ascii.txt](https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt) · [tabela ONI](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/ensostuff/ONI_v5.php) |
+| **GHSL GHS-POP R2023A** (JRC/Comissão Europeia), época 2025, 30″ | população por célula para a exposição E | [GHS-POP R2023A](https://human-settlement.emergency.copernicus.eu/ghs_pop2023.php) · [download](https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GLOBE_R2023A/) |
+| **IBGE** · malhas territoriais 2024 (API v3) | estados e municípios, busca e recorte | [API de malhas](https://servicodados.ibge.gov.br/api/docs/malhas?versao=3) |
+| **IBGE** · população estimada 2024 (tabela 6579) | população municipal (conferência e versão sem GHSL) | [API de agregados](https://servicodados.ibge.gov.br/api/docs/agregados?versao=3) |
+| **IBGE** · localidades | nomes de municípios e UFs | [API de localidades](https://servicodados.ibge.gov.br/api/docs/localidades) |
+| **FUNAI** · terras indígenas, via **TerraBrasilis/INPE (PRODES)** | exposição E_ti, regra R3 e nome da TI | [TerraBrasilis](https://terrabrasilis.dpi.inpe.br/) · [FUNAI geoprocessamento](https://www.gov.br/funai/pt-br/atuacao/terras-indigenas/geoprocessamento-e-mapas) |
+| **Natural Earth** 1:50m | fronteiras de países e população fora do Brasil | [Natural Earth](https://www.naturalearthdata.com/) |
+| **NASA GIBS** | fundo do mapa (Blue Marble) e camadas de satélite | [GIBS API docs](https://nasa-gibs.github.io/gibs-api-docs/) |
+| **H3** (Uber) | grade hexagonal da camada visual | [h3geo.org](https://h3geo.org/) |
+
+## Estudos e referências
+
+- Giglio, L.; Schroeder, W.; Justice, C. O. (2016). *The collection 6 MODIS active fire detection algorithm and fire
+  products.* Remote Sensing of Environment, 178, 31–41. [doi:10.1016/j.rse.2016.02.054](https://doi.org/10.1016/j.rse.2016.02.054). Base dos focos MODIS.
+- Schroeder, W.; Oliva, P.; Giglio, L.; Csiszar, I. A. (2014). *The New VIIRS 375 m active fire detection data product:
+  Algorithm description and initial assessment.* Remote Sensing of Environment, 143, 85–96. [doi:10.1016/j.rse.2013.12.008](https://doi.org/10.1016/j.rse.2013.12.008). Base dos focos VIIRS.
+- Breiman, L. (2001). *Random Forests.* Machine Learning, 45, 5–32. [doi:10.1023/A:1010933404324](https://doi.org/10.1023/A:1010933404324). Modelo de previsão.
+- Mavin, A.; Wilkinson, P.; Harwood, A.; Novak, M. (2009). *Easy Approach to Requirements Syntax (EARS).* IEEE
+  International Requirements Engineering Conference (RE'09). [doi:10.1109/RE.2009.9](https://doi.org/10.1109/RE.2009.9). Modelo dos requisitos do PRD.
+- Documentação: [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/), [NASA POWER](https://power.larc.nasa.gov/docs/methodology/) e [NOAA CPC, definição do ONI](https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/ensostuff/ONI_v5.php).
+- [GHSL, *GHS-POP R2023A*](https://human-settlement.emergency.copernicus.eu/ghs_pop2023.php) (JRC, 2023): método da grade de população.
+- **Análise própria** (NASA Space Apps 2026; pipeline em [`infra/`](infra/README.md)):
+  - o VIIRS vê 3,8–4,2× mais células-dia de 1 km que o Aqua no Brasil (≈11× à noite);
+  - fator por célula de 2° × mês calibrado em 2013–2019 e testado em 2020–2021: MAPE 4,7 % e R² 0,96 no mundo;
+  - deriva orbital do Aqua (passagem de 13h38 em 2019 para 14h55 em 2025) e +20 % de detecções em 2024–25, por isso o
+    Aqua pós-2021 não entra na calibração;
+  - teste de previsão: chuva quase não ajuda a 1 mês; o ONI pesa mais a 3 meses.
 
 ## Limites
 
