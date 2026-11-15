@@ -1,14 +1,16 @@
 """Formatos de resposta HTTP e política de cache do navegador/CDN."""
 import csv, io
 
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse, Response
 
-ARCHIVE_CACHE = 'public, max-age=86400'      # release é imutável; muda de versão, muda a resposta
+ARCHIVE_CACHE = 'public, max-age=60'        # a URL não carrega a versão da release; republicar tem de aparecer logo
 LIVE_CACHE = 'public, max-age=300'
 
 
-def json_ok(body: dict, cache_control: str = ARCHIVE_CACHE) -> JSONResponse:
-    return JSONResponse(body, headers={'Cache-Control': cache_control})
+def json_ok(body: BaseModel, cache_control: str = ARCHIVE_CACHE) -> JSONResponse:
+    """Serializa somente DTOs já validados para manter o contrato de saída explícito."""
+    return JSONResponse(body.model_dump(mode='json'), headers={'Cache-Control': cache_control})
 
 
 def csv_download(rows: list[dict], columns: list[str], filename: str) -> Response:
