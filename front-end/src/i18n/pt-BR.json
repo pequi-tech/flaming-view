@@ -184,10 +184,10 @@
  "met.not_t": "Não é probabilidade de um incêndio individual, nem propagação, área queimada ou severidade. O IPP ordena atenção; não é probabilidade de desastre. Recomendações apoiam o gestor e são aceitas ou ignoradas por uma pessoa. A previsão a três meses tem ganho pequeno sobre a climatologia.",
  "met.imp": "Importância das variáveis · M+1",
  "met.ipp": "Índice de Prioridade Preventiva",
- "met.ipp_n": "N previsão: posição global da razão prevista ÷ mediana do mês-alvo.",
+ "met.ipp_n": "N previsão: posição do fogo previsto (peso 0,75) e da razão previsto ÷ mediana (0,25), só entre células com fogo previsto; sem fogo, N fica no piso.",
  "met.ipp_v": "V histórico: posição da atividade acumulada 2003–2025 da célula.",
- "met.ipp_e": "E exposição: densidade populacional (IBGE 2024 no Brasil; país fora), mínimo 0,8 em terra indígena.",
- "met.cuts": "Cortes globais M+{h}: média ≥ {m} · alta ≥ {a} · crítica ≥ {c}",
+ "met.ipp_e": "E exposição: população da própria célula (GHSL 2025, ~1 km), mínimo 0,8 em terra indígena.",
+ "met.cuts": "Cortes M+{h} (entre células com fogo previsto): média ≥ {m} · alta ≥ {a} · máxima ≥ {c}, e máxima exige fogo acima do normal",
  "met.sources": "Fontes",
  "met.model": "Modelo",
  "met.model_t": "{v} · Random Forest em {r}° · treino {t0}–{t1} · emissão {issue}",
@@ -258,5 +258,8 @@
  "sort.fire": "Fogo previsto",
  "sort.ipp": "Prioridade (IPP)",
  "ia.code": "código: {c}",
- "ia.off": "indisponível"
+ "ia.off": "indisponível",
+ "col.pop": "População",
+ "ter.pop": "{n} pessoas na célula (GHSL 2025)",
+ "ipp.capped": "¹ Limitada a Alta: o índice é alto, mas não há fogo previsto acima do normal."
 }
