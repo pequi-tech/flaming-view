@@ -22,7 +22,7 @@ def make_model_release(root):
                       'e_ti': np.float32([c[5] for c in CELLS]),
                       'e': np.float32([max(c[4], 0.8 * c[5]) for c in CELLS]), 'ti_name': [c[6] for c in CELLS],
                       'municipality_id': [c[2] for c in CELLS], 'state_id': ['52', '52'], 'country': ['BRA', 'BRA'],
-                      'h3_4': ['h4a', 'h4a'], 'h3_5': ['h5a', 'h5a'], 'h3_6': ['h6a', 'h6b']})
+                      'pop': np.float32([1200.0, 30.0]), 'h3_4': ['h4a', 'h4a'], 'h3_5': ['h5a', 'h5a'], 'h3_6': ['h6a', 'h6b']})
     rows = [(i, h, f'2014-{8 + h:02d}', c[7][h - 1], c[8] / h, c[8] / h / 2, c[8] / h * 2, 2.0 / h, 0.9 / h)
             for i, c in zip(ids, CELLS) for h in (1, 2, 3)]
     p = pd.DataFrame(rows, columns=['cell_id', 'horizon', 'forecast_month', 'class', 'predicted', 'lo', 'hi', 'ratio', 'n'])
@@ -42,9 +42,11 @@ def make_model_release(root):
     (v / 'areas' / 'municipalities.geojson').write_text(json.dumps(
         {'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'properties': {'area_id': RV}, 'geometry': sq}]}))
     m = json.loads((v / 'manifest.json').read_text())
-    for f in ('territory.parquet', 'predictions.parquet', 'areas.parquet', 'model_metrics.json'):
+    pd.DataFrame({'lat': [-19.0], 'lon': [-56.0], 'rain': np.float32([-0.4]), 't2m': np.float32([1.2]),       # só a 1ª célula
+                  'rh2m': np.float32([-6.0]), 'wind': np.float32([0.1]), 'months': ['2014-05..2014-07']}).to_parquet(v / 'drivers.parquet')
+    for f in ('territory.parquet', 'predictions.parquet', 'areas.parquet', 'model_metrics.json', 'drivers.parquet'):
         m['files'][f] = {'bytes': (v / f).stat().st_size}
-    m['contract_version'] = '1.1.0'
+    m['contract_version'] = '1.2.0'
     (v / 'manifest.json').write_text(json.dumps(m))
     return [int(i) for i in ids]
 

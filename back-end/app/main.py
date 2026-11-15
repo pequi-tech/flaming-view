@@ -50,7 +50,7 @@ def create_app(release_dir=None, cache_path=None, map_key=None, fetch=None, toda
     app = FastAPI(title='Flaming View API', version=release.version,
                   description='Flaming View: histórico harmonizado MODIS×VIIRS, previsão M+1..M+3, IPP, recomendações e assistente. '
                               'Uso de IA: partes do código foram geradas com auxílio do Claude (Anthropic).')
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=5)   # 9 custa ~3x mais na camada de 4 MB
     app.add_middleware(CORSMiddleware, allow_origins=cfg.cors_origins.split(','), allow_methods=['GET', 'POST'])
     register_error_handlers(app)
 

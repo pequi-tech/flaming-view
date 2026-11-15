@@ -17,7 +17,13 @@ data/agg/viirs-jpss1_2026_Brazil.csv.gz:          # precisa de FIRMS_MAP_KEY; de
 	$(PY) fetch_2026.py --out data/agg
 
 # Previsão (RD-04..06) e território (RD-07, RD-09). Entradas IBGE/TI em data/ext (ver territory.py).
-model: data/metrics.json data/ext/oni.ascii.txt
+data/ext/power_05.parquet:                        # NASA POWER mensal, América do Sul (~2 min)
+	$(PY) power.py --out $@
+
+data/ext/ghsl.zip:                                # GHSL POP 2025, 30″ (~480 MB); territory.py usa por célula
+	curl -sSL -o $@.part https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL/GHS_POP_GLOBE_R2023A/GHS_POP_E2025_GLOBE_R2023A_4326_30ss/V1-0/GHS_POP_E2025_GLOBE_R2023A_4326_30ss_V1_0.zip && mv $@.part $@
+
+model: data/metrics.json data/ext/oni.ascii.txt data/ext/power_05.parquet data/ext/ghsl.zip
 	$(PY) model.py data
 	$(PY) territory.py data ../front-end/public/data/countries.geojson
 

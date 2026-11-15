@@ -9,6 +9,7 @@ from ..infra.release import Release
 SOURCES = [   # (id, uso, acesso em)
     ('NASA FIRMS · MODIS Aqua, VIIRS S-NPP, NOAA-20', 'série histórica 2003–2025; mês corrente (NRT)', '2026-11-14'),
     ('NOAA CPC · ONI', 'feature climática do modelo', '2026-11-15'),
+    ('NASA POWER · mensal (MERRA-2/IMERG)', 'chuva, temperatura, umidade e vento: features do modelo, fatores e regra R4', '2026-11-15'),
     ('IBGE · malhas 2024 e população estimada 2024', 'estados, municípios e exposição populacional no Brasil', '2026-11-15'),
     ('FUNAI · terras indígenas (via TerraBrasilis/INPE)', 'exposição E_ti e nome da TI', '2026-11-15'),
     ('Natural Earth 1:50m', 'países e densidade populacional fora do Brasil', '2026-11-14'),

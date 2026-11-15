@@ -69,19 +69,19 @@ export type ForecastResponseDTO = {
 };
 export type Recommendation = { rule_id: string; decisions: string[]; severity: "high" | "medium" | "low"; key: string };
 export type Explanation = { dominant: ("n" | "v" | "e")[]; weak: "n" | "v" | "e" };
-export type IppDTO = { value: number; level: IppLevel; n: number; v: number; e: number; explanation: Explanation };
+export type IppDTO = { value: number; level: IppLevel; capped?: boolean; n: number; v: number; e: number; explanation: Explanation };
 export type PriorityItem = IppDTO & {
   id: string; kind: "municipality" | "cell" | "hexagon"; name: string | null; ipp: number; forecast_level: Level;
-  predicted: number; cells: number; critical_cells: number; ti_name: string | null; lat: number; lon: number;
+  predicted: number; cells: number; critical_cells: number; ti_name: string | null; population?: number | null; lat: number; lon: number;
   recommendations: Recommendation[];
 };
 export type PrioritiesResponseDTO = { area: AreaRef; horizon: number; granularity: string; sort: string; total: number; release: string; cuts: Record<string, number>; items: PriorityItem[] };
 export type CellForecast = { horizon: number; forecast_month: string; level: Level; predicted: number; lo: number; hi: number; ratio: number; ipp: IppDTO };
-export type Driver = { key: string; value: number | null; unit: string; importance: number | null; available: boolean };
+export type Driver = { key: string; value: number | null; unit: string; importance: number | null; available: boolean; months?: string | null };
 export type CellResponseDTO = {
   cell_id: number; lat: number; lon: number; release: string; model_version: string; recent_data: boolean; issue_month: string;
   place: { country: string; country_name?: string; state_id?: string; state_name?: string; municipality_id?: string; municipality_name?: string; ti_name: string | null };
-  exposure: { v: number; e: number; e_pop: number; e_ti: number };
+  exposure: { v: number; e: number; e_pop: number; e_ti: number; population?: number | null };
   forecast: CellForecast[];
   history: { year: number; month: number; value: number; level: Level; median: number }[];
   climatology: { month: number; p25: number; median: number; p75: number; p90: number }[];

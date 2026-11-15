@@ -8,7 +8,8 @@ Saídas em data/model/: territory.parquet, areas.parquet, areas/{countries,state
 
 V = rank da atividade acumulada da célula (anos completos). E_pop = rank da densidade populacional: município
 (IBGE 2024) no Brasil, país (Natural Earth) fora. E_ti = 1 se >= 20 % da célula (amostra 5×5) cai em TI.
-E = max(E_pop, 0,8·E_ti). Tudo com piso 0,05.
+E = max(E_pop, 0,8·E_ti). Tudo com piso 0,05. Com data/ext/ghsl.zip (GHSL POP 2025, 30″),
+E_pop passa a ser o rank da população da própria célula e a coluna `pop` guarda as pessoas.
 """
 import glob, json, math, os, shutil, sys, unicodedata
 import numpy as np
@@ -62,6 +63,45 @@ def assign(px, py, features, key):
             hit = inside(px[cand], py[cand], rings)
             out[cand[hit]] = key(f)
     return out
+
+
+def ghsl_population(zip_path, lat, lon):
+    """População GHSL 2025 (30″ ≈ 1 km, WGS84) somada em cada célula de 0,05° (6 × 6 pixels). lat/lon = canto SW."""
+    import tifffile, zipfile
+    with zipfile.ZipFile(zip_path) as z:
+        name = next(n for n in z.namelist() if n.endswith('.tif'))
+        tmp = os.path.join(os.path.dirname(zip_path), name)
+        z.extract(name, os.path.dirname(zip_path))
+    try:
+        with tifffile.TiffFile(tmp) as t:
+            page = t.pages[0]
+            sx = page.tags['ModelPixelScaleTag'].value[0]
+            x0, y0 = page.tags['ModelTiepointTag'].value[3:5]          # canto NW do raster
+            a = page.asarray()
+    finally:
+        os.remove(tmp)
+    a = np.where(a > 0, a, 0).astype(np.float32)                         # nodata (-200) e negativos = 0
+    k = int(round(0.05 / sx))                                            # pixels por célula (6)
+    rows, cols = a.shape[0] // k, a.shape[1] // k
+    g = a[:rows * k, :cols * k].reshape(rows, k, cols, k).sum((1, 3))
+    del a
+    r = np.floor((y0 - (lat + 0.05)) / 0.05 + 1e-6).astype(int)           # linha da célula a partir do topo
+    c = np.floor((lon - x0) / 0.05 + 1e-6).astype(int)
+    ok = (r >= 0) & (r < rows) & (c >= 0) & (c < cols)
+    out = np.zeros(len(lat), np.float32)
+    out[ok] = g[r[ok], c[ok]]
+    return out
+
+
+def apply_ghsl(out, zip_path):
+    """E_pop = rank da população GHSL da própria célula (A9 do PRD), em vez da densidade do município."""
+    t = pd.read_parquet(os.path.join(out, 'territory.parquet'))
+    t['pop'] = ghsl_population(zip_path, t.lat.to_numpy(), t.lon.to_numpy())
+    t['e_pop'] = rank(t['pop'])
+    t['e'] = np.maximum(t.e_pop, np.float32(0.8) * t.e_ti).clip(FLOOR).astype('float32')
+    t.to_parquet(os.path.join(out, 'territory.parquet'), index=False, row_group_size=200_000)
+    print('GHSL: população total', round(float(t['pop'].sum()) / 1e9, 2), 'bi nas células com fogo;',
+          'células com pop > 0:', int((t['pop'] > 0).sum()), flush=True)
 
 
 def rank(x):
@@ -146,6 +186,9 @@ def main(data, countries_path):
     for r in (4, 5, 6):
         t[f'h3_{r}'] = [h3.latlng_to_cell(la + 0.025, lo + 0.025, r) for la, lo in zip(t.lat, t.lon)]
     t.sort_values('cell_id').to_parquet(os.path.join(out, 'territory.parquet'), index=False, row_group_size=200_000)
+    ghsl = os.path.join(ext, 'ghsl.zip')
+    if os.path.exists(ghsl):
+        apply_ghsl(out, ghsl)
     build_areas(out, meta, pop, mun, uf, countries, countries_path)
 
 
@@ -179,7 +222,9 @@ def build_areas(out, meta, pop, mun, uf, countries, countries_path):
 
 
 if __name__ == '__main__':
-    if '--areas-only' in sys.argv:            # território já gerado; refaz só as áreas
+    if '--pop-only' in sys.argv:               # território já gerado; troca só a exposição pela do GHSL
+        apply_ghsl(os.path.join(sys.argv[1], 'model'), os.path.join(sys.argv[1], 'ext', 'ghsl.zip'))
+    elif '--areas-only' in sys.argv:            # território já gerado; refaz só as áreas
         d, cp = sys.argv[1:3]; ext = os.path.join(d, 'ext')
         pop = {s['localidade']['id']: int(s['serie']['2024']) if s['serie']['2024'].isdigit() else 0
                for s in json.load(open(os.path.join(ext, 'pop2024.json')))[0]['resultados'][0]['series']}

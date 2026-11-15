@@ -24,8 +24,8 @@ PARTIAL_BBOX = (-74, -34, -34, 6)   # 2026 só existe para o Brasil (RD-01)
 MEDIAN_FLOOR = 5.0              # razão prevista ÷ mediana: abaixo disso um foco isolado viraria "anomalia" enorme
 
 
-def fit_horizon(A, lat, clim, oni, h, last_t):
-    rows = F.dataset(A, lat, clim, oni, h, range(12, last_t - h + 1))
+def fit_horizon(A, lat, clim, oni, h, last_t, wxa=None):
+    rows = F.dataset(A, lat, clim, oni, h, range(12, last_t - h + 1), wxa)
     train, test = rows[rows.T_year <= F.TRAIN_LAST], rows[rows.T_year > F.TRAIN_LAST]
     train = train.sample(min(len(train), TRAIN_ROWS), random_state=SEED)
     kw = dict(min_samples_leaf=20, max_features='sqrt', n_jobs=-1, random_state=SEED)
@@ -53,10 +53,10 @@ def to_class(p, cuts):
     return k
 
 
-def forecast(A, cells, clim, clim_all, oni, h, t, clf, reg, cuts):
+def forecast(A, cells, clim, clim_all, oni, h, t, clf, reg, cuts, wxa=None):
     """Previsão em célula grossa para emissão t: classe, contagem e faixa p10-p90 das árvores.
     Features com a climatologia do treino (igual ao ajuste); razão e regra p90 = 0 com a série inteira (igual ao back-end)."""
-    X = F.features_at(A, t, h, cells.lat.to_numpy(np.float32), clim, oni)
+    X = F.features_at(A, t, h, cells.lat.to_numpy(np.float32), clim, oni, wxa)
     m = (t + h) % 12
     trees = np.stack([e.predict(X.to_numpy()) for e in reg.estimators_])
     k = np.ones(len(X), np.int8)
@@ -67,6 +67,25 @@ def forecast(A, cells, clim, clim_all, oni, h, t, clf, reg, cuts):
     return pd.DataFrame({'class_k': k, 'predicted_c': pred, 'lo_c': np.expm1(np.quantile(trees, .1, 0)).clip(0),
                          'hi_c': np.expm1(np.quantile(trees, .9, 0)).clip(0),
                          'ratio': pred / np.maximum(clim_all['median'][:, m], MEDIAN_FLOOR)})
+
+
+def drivers(W, wclim, cells, t_issue):
+    """Fatores dos 3 meses anteriores à emissão de cada célula (R4 e cartões do /cell). Chuva e vento em fração
+    do normal do mês (−0,38 = 38 % abaixo); temperatura em °C e umidade em pontos percentuais de diferença."""
+    rows = np.arange(len(cells))
+    idx = np.stack([t_issue - k for k in (3, 2, 1)], 1)                                # célula × 3 meses
+    month = idx % 12
+    val = {v: W[v][rows[:, None], idx] for v in F.WX}
+    nor = {v: wclim[v][rows[:, None], month] for v in F.WX}
+    with np.errstate(all='ignore'):
+        rel = lambda v: np.nansum(val[v], 1) / np.nansum(nor[v], 1) - 1
+        diff = lambda v: np.nanmean(val[v] - nor[v], 1)
+        d = pd.DataFrame({'lat': cells.lat.round(3).to_numpy(), 'lon': cells.lon.round(3).to_numpy(),
+                          'rain': rel('prec'), 't2m': diff('t2m'), 'rh2m': diff('rh2m'), 'wind': rel('ws2m')})
+    t0, t1 = idx[:, 0], idx[:, 2]
+    d['months'] = [f'{F.Y0 + a // 12}-{a % 12 + 1:02d}..{F.Y0 + b // 12}-{b % 12 + 1:02d}' for a, b in zip(t0, t1)]
+    d = d.replace([np.inf, -np.inf], np.nan).dropna(subset=['rain', 't2m', 'rh2m', 'wind'], how='all')
+    return d.astype({c: 'float32' for c in ('rain', 't2m', 'rh2m', 'wind')})
 
 
 def fine_climatology(grid_glob, res, years):
@@ -90,7 +109,10 @@ def main(data):
         cells, A = F.coarse_matrix(grid, res, full[-1])
         clim = F.climatology(A)
         last_full_t = (full[-1] - F.Y0 + 1) * 12 - 1
-        fits = {h: fit_horizon(A, cells.lat.to_numpy(np.float32), clim, oni, h, last_full_t) for h in HORIZONS}
+        power = os.path.join(data, 'ext', 'power_05.parquet')
+        W = F.weather_matrices(power, cells, A.shape[1], res) if os.path.exists(power) else None
+        wxa, wclim = F.weather_anomalies(W) if W else (None, None)
+        fits = {h: fit_horizon(A, cells.lat.to_numpy(np.float32), clim, oni, h, last_full_t, wxa) for h in HORIZONS}
         print(res, {h: f[3]['auc'] for h, f in fits.items()}, flush=True)
         if fits[1][3]['auc'] >= AUC_MIN:
             break
@@ -110,7 +132,7 @@ def main(data):
                         (last_full_t, ~in_partial if has_partial else np.zeros(len(cells), bool))):
             if not mask.any():
                 continue
-            fc = forecast(A, cells, clim, clim_all, oni, h, t, clf, reg, cuts)[np.asarray(mask)]
+            fc = forecast(A, cells, clim, clim_all, oni, h, t, clf, reg, cuts, wxa)[np.asarray(mask)]
             T = t + h
             fc = fc.assign(lat=cells.lat[np.asarray(mask)].to_numpy(), lon=cells.lon[np.asarray(mask)].to_numpy(),
                            forecast_month=f'{F.Y0 + T // 12}-{T % 12 + 1:02d}', month=T % 12 + 1,
@@ -133,12 +155,16 @@ def main(data):
     p['ratio'] = p.ratio.astype('float32')
     p.sort_values(['cell_id', 'horizon']).to_parquet(os.path.join(out, 'predictions.parquet'), index=False, row_group_size=200_000)
     fits[1][4].to_parquet(os.path.join(out, 'features.parquet'), index=False)
+    if W:
+        drivers(W, wclim, cells, np.where(np.asarray(in_partial) & has_partial, last_t, last_full_t)).to_parquet(
+            os.path.join(out, 'drivers.parquet'), index=False)
     metrics = {'model_version': version, 'resolution_used': res, 'train_years': [F.Y0, F.TRAIN_LAST],
                'test_years': [F.TRAIN_LAST + 1, full[-1]], 'issue_month': f'{F.Y0 + last_t // 12}-{last_t % 12 + 1:02d}',
                'issue_month_outside_partial': f'{full[-1]}-12', 'seed': SEED, 'generated_at': generated,
                'class_rule': 'critico = top-10 % de P(critico) no treino; alto = top-25 % de P(alto+critico); baixo se P(baixo) >= 0,5',
-               'drivers': 'ONI + histórico (NASA POWER fora desta versão)',
-               'oni_recent': round(float(oni.get(last_full_t, oni.get(last_full_t - 1, 0.0))), 2),
+               'drivers': 'histórico + ONI + NASA POWER (chuva, temperatura, umidade, vento; meses t-1..t-3)' if W else 'histórico + ONI',
+               'power_coverage': 'América do Sul (82°W–34°W, 56°S–13°N)' if W else None,
+               'oni_recent': round(float(oni.get(last_t - 1, 0.0)), 2),          # mesmo ONI que a feature `oni` usa na emissão
                'horizons': {str(h): {**f[3], 'resolution_used': res} for h, f in fits.items()}}
     json.dump(metrics, open(os.path.join(out, 'metrics.json'), 'w'), indent=1)
     print(json.dumps({h: {k: v for k, v in m.items() if k not in ('features', 'importances')} for h, m in metrics['horizons'].items()}, indent=1))

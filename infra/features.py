@@ -4,6 +4,7 @@ Tudo vira matriz A[célula, t] (t = meses desde jan/2003, zeros preenchidos). Um
 alvo no mês T = t + h. Nenhuma feature lê A depois de t (teste em test/test_features.py). A climatologia do mês-alvo
 usa só os anos de treino, então também não olha o período de teste.
 """
+import warnings
 import numpy as np
 import pandas as pd
 import duckdb
@@ -12,8 +13,10 @@ Y0 = 2003
 TRAIN_LAST = 2022
 LEVELS = ('baixo', 'normal', 'alto', 'critico')
 SEAS = ['DJF', 'JFM', 'FMA', 'MAM', 'AMJ', 'MJJ', 'JJA', 'JAS', 'ASO', 'SON', 'OND', 'NDJ']
+WX = ('prec', 't2m', 'rh2m', 'ws2m')          # NASA POWER (RD-03): chuva, temperatura, umidade, vento
+WX_FEATURES = [f'{v}_a{k}' for v in WX for k in (1, 3)]
 FEATURES = ['a_t', 'a_t1', 'a_t2', 'a_T12', 'ma3', 'ma12', 'clim_med', 'clim_p75', 'clim_p90',
-            'msin', 'mcos', 'lat', 'oni', 'oni3']
+            'msin', 'mcos', 'lat', 'oni', 'oni3'] + WX_FEATURES
 
 
 def oni_table(path):
@@ -36,6 +39,41 @@ def coarse_matrix(grid_glob, res, last_year):
     return cells[['lat', 'lon']], A
 
 
+def weather_matrices(path, cells, n_t, res):
+    """POWER em matrizes célula × t (como A): cada célula grossa recebe o ponto POWER mais próximo do seu centro.
+    Fora da cobertura (POWER só da América do Sul) ou mês sem dado = NaN."""
+    d = pd.read_parquet(path)
+    d = d.assign(t=(d.year - Y0) * 12 + d.month - 1)
+    d = d[(d.t >= 0) & (d.t < n_t)]
+    lat0, lon0 = d.lat.min(), d.lon.min()
+    nlat, nlon = int(round((d.lat.max() - lat0) / 0.5)) + 1, int(round((d.lon.max() - lon0) / 0.625)) + 1
+    gi, gj = ((d.lat - lat0) / 0.5).round().astype(int).to_numpy(), ((d.lon - lon0) / 0.625).round().astype(int).to_numpy()
+    ci = np.round((cells.lat.to_numpy() + res / 2 - lat0) / 0.5).astype(int)
+    cj = np.round((cells.lon.to_numpy() + res / 2 - lon0) / 0.625).astype(int)
+    inside = (ci >= 0) & (ci < nlat) & (cj >= 0) & (cj < nlon)
+    out = {}
+    for v in WX:
+        G = np.full((nlat, nlon, n_t), np.nan, np.float32)
+        G[gi, gj, d.t.to_numpy()] = d[v].to_numpy()
+        M = np.full((len(cells), n_t), np.nan, np.float32)
+        M[inside] = G[ci[inside], cj[inside]]
+        out[v] = M
+    return out
+
+
+def weather_anomalies(W, last_year=TRAIN_LAST):
+    """Anomalia = valor − média do mesmo mês nos anos de treino (não olha o período de teste). Também devolve a média."""
+    n = (last_year - Y0 + 1) * 12
+    anom, clim = {}, {}
+    for v, M in W.items():
+        with np.errstate(all='ignore'):
+            warnings.simplefilter('ignore', RuntimeWarning)
+            c = np.nanmean(M[:, :n].reshape(len(M), -1, 12), axis=1)          # célula × mês
+        clim[v] = c
+        anom[v] = M - np.tile(c, M.shape[1] // 12 + 1)[:, :M.shape[1]]
+    return anom, clim
+
+
 def climatology(A, last_year=TRAIN_LAST):
     """Por célula × mês do ano: p25, mediana, p75, p90 e média sobre 2003..last_year (zeros incluídos)."""
     n = (last_year - Y0 + 1) * 12
@@ -55,8 +93,15 @@ def classify(value, clim, m):
     return k
 
 
-def features_at(A, t, h, lat, clim, oni):
-    """Features da emissão t para o alvo T = t + h. Só lê A[:, ..t] (e A[:, T-12], que é <= t para h <= 12)."""
+def features_at(A, t, h, lat, clim, oni, wxa=None):
+    """Features da emissão t para o alvo T = t + h. Só lê A[:, ..t] (e A[:, T-12], que é <= t para h <= 12).
+    POWER usa t-1..t-3: o mês de emissão costuma ainda não estar publicado no POWER."""
+    wx = {}
+    for v in WX:
+        a = wxa[v] if wxa is not None else np.full((len(A), A.shape[1]), np.nan, np.float32)
+        with np.errstate(all='ignore'):
+            warnings.simplefilter('ignore', RuntimeWarning)
+            wx[f'{v}_a1'], wx[f'{v}_a3'] = a[:, t - 1], np.nanmean(a[:, t - 3:t], axis=1)
     T = t + h
     m = T % 12
     l = lambda x: np.log1p(np.maximum(x, 0))
@@ -66,10 +111,11 @@ def features_at(A, t, h, lat, clim, oni):
         'clim_med': l(clim['median'][:, m]), 'clim_p75': l(clim['p75'][:, m]), 'clim_p90': l(clim['p90'][:, m]),
         'msin': np.float32(np.sin(2 * np.pi * m / 12)), 'mcos': np.float32(np.cos(2 * np.pi * m / 12)),
         'lat': lat, 'oni': oni.get(t - 1, 0.0), 'oni3': np.mean([oni.get(t - k, 0.0) for k in (1, 2, 3)]),
+        **wx,
     })
 
 
-def dataset(A, lat, clim, oni, h, t_range):
+def dataset(A, lat, clim, oni, h, t_range, wxa=None):
     """Linhas (célula, t) com alvo conhecido em T = t + h. Só células com p90 > 0 no mês-alvo (senão a classe é 'normal' por regra)."""
     parts = []
     for t in t_range:
@@ -77,7 +123,7 @@ def dataset(A, lat, clim, oni, h, t_range):
         if t < 12 or T >= A.shape[1]:
             continue
         ok = clim['p90'][:, T % 12] > 0
-        f = features_at(A, t, h, lat, clim, oni)[ok]
+        f = features_at(A, t, h, lat, clim, oni, wxa)[ok]
         f['y_class'] = classify(A[ok, T], {k: v[ok] for k, v in clim.items()}, T % 12)
         f['y_log'] = np.log1p(A[ok, T])
         f['T_year'] = Y0 + T // 12

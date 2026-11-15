@@ -17,3 +17,13 @@ class TestIpp(unittest.TestCase):
 
     def test_explicacao(self):
         self.assertEqual(explain(0.9, 0.2, 0.7), {'dominant': ['n', 'e'], 'weak': 'v'})
+
+
+class TestTravaDeHonestidade(unittest.TestCase):
+    cuts = {'medio': 0.4, 'alto': 0.6, 'critico': 0.75}
+
+    def test_maxima_so_com_fogo_acima_do_normal(self):
+        self.assertEqual(ipp_level(0.9, self.cuts, fire_k=1), 'alto')        # fogo normal: no máximo Alta
+        self.assertEqual(ipp_level(0.9, self.cuts, fire_k=2), 'critico')
+        self.assertEqual(ipp_level(0.9, self.cuts, fire_k=3), 'critico')
+        self.assertEqual(ipp_level(0.5, self.cuts, fire_k=0), 'medio')        # abaixo de Máxima não muda
