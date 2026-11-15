@@ -10,7 +10,7 @@ LIVE_CACHE = 'public, max-age=300'
 
 def json_ok(body: BaseModel, cache_control: str = ARCHIVE_CACHE) -> JSONResponse:
     """Serializa somente DTOs já validados para manter o contrato de saída explícito."""
-    return JSONResponse(body.model_dump(mode='json'), headers={'Cache-Control': cache_control})
+    return Response(body.model_dump_json(), media_type='application/json', headers={'Cache-Control': cache_control})   # serializa em Rust
 
 
 def csv_download(rows: list[dict], columns: list[str], filename: str) -> Response:
