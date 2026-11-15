@@ -9,7 +9,7 @@ e terras indígenas e sugere ações preventivas que o gestor aceita ou ignora, 
 
 *Prever é o começo. Priorizar é o diferencial. Preparar-se antes é o impacto.*
 
-## Uso de SI (Sistemas Inteligentes)
+## Uso de SI (Super Inteligence)
 
 Partes do código, da documentação e do processamento de dados deste projeto foram geradas com auxílio do
 **Claude (Anthropic)**, sempre revisadas e testadas pela equipe.
