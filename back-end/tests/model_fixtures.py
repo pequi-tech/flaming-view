@@ -22,7 +22,7 @@ def make_model_release(root):
                       'e_ti': np.float32([c[5] for c in CELLS]),
                       'e': np.float32([max(c[4], 0.8 * c[5]) for c in CELLS]), 'ti_name': [c[6] for c in CELLS],
                       'municipality_id': [c[2] for c in CELLS], 'state_id': ['52', '52'], 'country': ['BRA', 'BRA'],
-                      'h3_4': ['h4a', 'h4a'], 'h3_5': ['h5a', 'h5a'], 'h3_6': ['h6a', 'h6b']})
+                      'pop': np.float32([1200.0, 30.0]), 'h3_4': ['h4a', 'h4a'], 'h3_5': ['h5a', 'h5a'], 'h3_6': ['h6a', 'h6b']})
     rows = [(i, h, f'2014-{8 + h:02d}', c[7][h - 1], c[8] / h, c[8] / h / 2, c[8] / h * 2, 2.0 / h, 0.9 / h)
             for i, c in zip(ids, CELLS) for h in (1, 2, 3)]
     p = pd.DataFrame(rows, columns=['cell_id', 'horizon', 'forecast_month', 'class', 'predicted', 'lo', 'hi', 'ratio', 'n'])

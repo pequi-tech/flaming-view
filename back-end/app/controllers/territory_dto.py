@@ -17,6 +17,7 @@ class RecommendationDTO(OutputDTO):
 class IppDTO(OutputDTO):
     value: float
     level: IppLevel
+    capped: bool = False
     n: float
     v: float
     e: float
@@ -33,6 +34,7 @@ class PriorityItemDTO(IppDTO):
     cells: int
     critical_cells: int
     ti_name: str | None
+    population: int | None = None
     lat: float
     lon: float
     recommendations: list[RecommendationDTO]
