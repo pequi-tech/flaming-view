@@ -114,3 +114,10 @@ class TestNasaPower(ModelApiCase):
         self.assertFalse(next(d for d in sem['drivers'] if d['key'] == 'rain')['available'])
         mun = self.client.get('/priorities', params={'area_id': 'BR52'}).json()['items'][0]
         self.assertIn('R4', [r['rule_id'] for r in mun['recommendations']])
+
+
+class TestPopulacaoGhsl(ModelApiCase):
+    def test_populacao_da_celula_e_do_municipio(self):
+        self.assertEqual(self.client.get(f'/cell/{self.ids[0]}').json()['exposure']['population'], 1200)
+        mun = self.client.get('/priorities', params={'area_id': 'BR52'}).json()['items'][0]
+        self.assertEqual(mun['population'], 1230)

@@ -4,7 +4,7 @@ O IPP é calculado aqui no boot com os pesos de domain/ipp_params (não é mater
 globais saem dos quantis desse cálculo. Consultas por área usam o filtro de domain/territory.Area.
 """
 from ..domain.errors import ModelUnavailable, NotFound
-from ..domain.ipp_params import CUT_QUANTILES, FLOOR, WEIGHTS
+from ..domain.ipp_params import CUT_MIN_FIRE, CUT_QUANTILES, FLOOR, N_VOLUME_SHARE, WEIGHTS
 from .release import Release
 
 K = "CASE {c} WHEN 'baixo' THEN 0 WHEN 'normal' THEN 1 WHEN 'alto' THEN 2 ELSE 3 END"
@@ -33,12 +33,20 @@ class ModelStore:
                       f" AND d.lon = round(floor(t.lon / {res}) * {res}, 3)")
         self.db.execute(f"""CREATE TABLE cp AS SELECT t.*, {cols}, p1.recent_data AS recent, p1.model_version AS model_version, {wx}
                             FROM read_parquet('{p('territory.parquet')}') t {joins} {wxjoin}""")
+        self.db.execute('ALTER TABLE cp ADD COLUMN IF NOT EXISTS pop FLOAT')   # releases sem GHSL (contrato < 1.3)
         self.db.execute('ALTER TABLE cp ADD COLUMN ipp1 FLOAT; ALTER TABLE cp ADD COLUMN ipp2 FLOAT; ALTER TABLE cp ADD COLUMN ipp3 FLOAT')
+        a = N_VOLUME_SHARE                               # N = rank(volume)^a · rank(razão)^(1−a), global
+        for h in H:
+            # rank só entre células com fogo relevante; sem fogo previsto, N = piso (não "metade do mundo")
+            self.db.execute(f"UPDATE cp SET n{h} = {FLOOR}")
+            self.db.execute(f"""UPDATE cp SET n{h} = x.n FROM (SELECT cell_id, greatest({FLOOR},
+                pow(percent_rank() OVER (ORDER BY p{h}), {a}) * pow(percent_rank() OVER (ORDER BY r{h}), {1 - a})) AS n
+                FROM cp WHERE p{h} >= {CUT_MIN_FIRE}) x WHERE cp.cell_id = x.cell_id""")
         self.db.execute(f"UPDATE cp SET {', '.join(f'ipp{h} = {ipp(h)}' for h in H)}")
         self.db.execute(f"CREATE TABLE areas AS SELECT * FROM read_parquet('{p('areas.parquet')}')")
         q = list(CUT_QUANTILES.values())
         for h in H:
-            vals = self.db.execute(f'SELECT quantile_cont(ipp{h}, {q}) FROM cp').fetchone()[0]
+            vals = self.db.execute(f'SELECT quantile_cont(ipp{h}, {q}) FROM cp WHERE p{h} >= {CUT_MIN_FIRE}').fetchone()[0]
             self.cuts[h] = {k: round(float(v), 4) for k, v in zip(CUT_QUANTILES, vals)}
 
     def _need(self):
@@ -84,8 +92,8 @@ class ModelStore:
         if h3_res is None:
             keep = '' if layer == 'ipp' else f' AND (p{h} > 0.01 OR k{h} = 3)'
             return self.rows(f"SELECT cell_id::VARCHAR AS id, lat, lon, {v} AS value, k{h} AS k FROM cp WHERE {where}{keep}", params)
-        agg = f'avg({v})' if layer == 'ipp' else f'sum({v})'
-        k = 'NULL' if layer == 'ipp' else f'coalesce(round(sum(k{h} * (p{h} + 0.001)) / sum(p{h} + 0.001)), 1)'
+        agg = f'sum({v} * (p{h} + 0.001)) / sum(p{h} + 0.001)' if layer == 'ipp' else f'sum({v})'   # IPP: média ponderada pelo fogo
+        k = f'max(k{h})' if layer == 'ipp' else f'coalesce(round(sum(k{h} * (p{h} + 0.001)) / sum(p{h} + 0.001)), 1)'
         return self.rows(f"""SELECT h3_{h3_res} AS id, avg(lat) + 0.025 AS lat, avg(lon) + 0.025 AS lon, {agg} AS value, {k} AS k
             FROM cp WHERE {where} GROUP BY 1""", params)
 
@@ -98,10 +106,13 @@ class ModelStore:
 
     def priorities(self, where: str, params: list, h: int, key: str) -> list[dict]:
         """Todos os grupos (município, célula ou hexágono) da área, com o contexto das regras R1–R7. Ordem e corte ficam no serviço."""
-        return self.rows(f"""SELECT {key}::VARCHAR AS id, max(ipp{h}) AS ipp, arg_max(n{h}, ipp{h}) AS n, arg_max(v, ipp{h}) AS v,
-            arg_max(e, ipp{h}) AS e, sum(p{h}) AS predicted, count(*) AS cells, count_if(k{h} = 3) AS critical,
+        # índice do grupo = média ponderada pelo fogo previsto: mostra onde o fogo está, não a melhor célula isolada
+        w = f'(p{h} + 0.001)'
+        wavg = lambda c: f'sum({c} * {w}) / sum({w})'
+        return self.rows(f"""SELECT {key}::VARCHAR AS id, {wavg(f'ipp{h}')} AS ipp, {wavg(f'n{h}')} AS n, {wavg('v')} AS v,
+            {wavg('e')} AS e, sum(p{h}) AS predicted, count(*) AS cells, count_if(k{h} = 3) AS critical,
             max(k1) AS k1, max(k2) AS k2, max(k3) AS k3, bool_or(k1 >= 2 AND e >= 0.75) AS exposed_high,
-            bool_or(e_ti >= 1 AND greatest(k1, k2, k3) = 3) AS ti_critical, bool_or(v >= 0.75 AND k1 = 1) AS recurrent_normal, min(rain) AS rain,
+            bool_or(e_ti >= 1 AND greatest(k1, k2, k3) = 3) AS ti_critical, bool_or(v >= 0.75 AND k1 = 1) AS recurrent_normal, min(rain) AS rain, sum(pop) AS population,
             avg((k1 = 3)::INT) AS crit_share, any_value(ti_name) FILTER (WHERE ti_name IS NOT NULL) AS ti_name,
             avg(lat) + 0.025 AS lat, avg(lon) + 0.025 AS lon
             FROM cp WHERE {where} AND {key} IS NOT NULL GROUP BY 1""", params)

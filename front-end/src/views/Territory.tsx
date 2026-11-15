@@ -4,6 +4,7 @@ import { ApiError, fvApi } from "../api/client";
 import type { CellResponseDTO } from "../api/dto";
 import { decisionKey, useDecisions } from "../decisions";
 import { monthName, monthShort, num, t } from "../i18n";
+import { nf } from "../geo";
 import { Chip, CountUp, Explain, Meter, ordinal, useEntrance, useLenis } from "../ui";
 import { Recs } from "./Recs";
 
@@ -38,7 +39,8 @@ export function Territory({ ctx }: { ctx: AppCtx }) {
           </div>
         </div>
         <div className="h1" data-a>{c ? place || "—" : ctx.cell === null ? t("map.label") : err ?? t("ter.loading")}</div>
-        {c && <div className="sub" data-a>{t("ter.coords", { lat: num(c.lat + 0.025, 3), lon: num(c.lon + 0.025, 3) })} · {c.place.ti_name ? t("ter.ti", { name: c.place.ti_name }) : t("ter.noti")}</div>}
+        {c && <div className="sub" data-a>{t("ter.coords", { lat: num(c.lat + 0.025, 3), lon: num(c.lon + 0.025, 3) })} · {c.place.ti_name ? t("ter.ti", { name: c.place.ti_name }) : t("ter.noti")}
+          {c.exposure.population != null && <> · {t("ter.pop", { n: nf(c.exposure.population) })}</>}</div>}
       </div>
       {c && f && <div ref={scroll} className="scroll" style={{ flex: 1 }}><div className="stack" style={{ padding: "14px 18px 18px", gap: 12 }}>
         <div className="row ter-cards" style={{ alignItems: "stretch", gap: 10 }} data-a>
@@ -48,6 +50,7 @@ export function Territory({ ctx }: { ctx: AppCtx }) {
               <b style={{ font: "650 38px/1 var(--font)" }}><CountUp value={f.ipp.value} digits={2} /></b>
               <span className="muted" style={{ paddingBottom: 4 }}>IPP</span></div>
             <div className="sub"><Explain level={f.ipp.level} ex={f.ipp.explanation} /></div>
+            {f.ipp.capped && <div className="muted" style={{ marginTop: 6 }}>{t("ipp.capped")}</div>}
             <div className="stack" style={{ gap: 7, marginTop: 10 }}><Meter k="n" value={f.ipp.n} /><Meter k="v" value={f.ipp.v} /><Meter k="e" value={f.ipp.e} /></div>
           </div>
           <div className="card" style={{ flex: 1 }}>

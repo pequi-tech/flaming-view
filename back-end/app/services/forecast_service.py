@@ -57,7 +57,7 @@ class ForecastService:
         else:
             rows = self.store.cells(where, params, h, layer, h3_res)
         cuts = self.store.cuts.get(h, {})
-        level = (lambda r: ipp_level(r['value'], cuts)) if layer == 'ipp' else \
+        level = (lambda r: ipp_level(r['value'], cuts, r['k'])) if layer == 'ipp' else \
                 (lambda r: None) if layer == 'history' else (lambda r: LEVELS[int(r['k'])])
         return {'layer': layer, 'horizon': h, 'shape': 'h3' if h3_res else 'square', 'h3_res': h3_res,
                 'unit': 'IPP' if layer == 'ipp' else UNIT, 'release': self.release.version, 'cuts': cuts if layer == 'ipp' else None,

@@ -15,8 +15,9 @@ class TerritoryService:
     def __init__(self, release: Release, store: ModelStore):
         self.release, self.store = release, store
 
-    def _ipp(self, h, n, v, e, ipp):
-        return {'value': round(ipp, 4), 'level': ipp_level(ipp, self.store.cuts[h]), 'n': round(n, 3), 'v': round(v, 3),
+    def _ipp(self, h, n, v, e, ipp, fire_k=None):
+        level = ipp_level(ipp, self.store.cuts[h], fire_k)
+        return {'value': round(ipp, 4), 'level': level, 'capped': level != ipp_level(ipp, self.store.cuts[h]), 'n': round(n, 3), 'v': round(v, 3),
                 'e': round(e, 3), 'explanation': explain(n, v, e)}
 
     def drivers(self, val: dict, clim: dict, issue: tuple[int, int], r: dict) -> list[dict]:
@@ -60,10 +61,11 @@ class TerritoryService:
                       'state_id': r['state_id'] and 'BR' + r['state_id'], 'state_name': names.get(r['state_id'] and 'BR' + r['state_id']),
                       'municipality_id': r['municipality_id'] and 'BR' + r['municipality_id'],
                       'municipality_name': names.get(r['municipality_id'] and 'BR' + r['municipality_id']), 'ti_name': r['ti_name']},
-            'exposure': {'v': round(r['v'], 3), 'e': round(r['e'], 3), 'e_pop': round(r['e_pop'], 3), 'e_ti': r['e_ti']},
+            'exposure': {'v': round(r['v'], 3), 'e': round(r['e'], 3), 'e_pop': round(r['e_pop'], 3), 'e_ti': r['e_ti'],
+                         'population': None if r.get('pop') is None or r['pop'] != r['pop'] else round(r['pop'])},
             'forecast': [{'horizon': h, 'forecast_month': r[f'm{h}'], 'level': r[f'c{h}'], 'predicted': round(r[f'p{h}'], 2),
                           'lo': round(r[f'lo{h}'], 2), 'hi': round(r[f'hi{h}'], 2), 'ratio': round(r[f'r{h}'], 3),
-                          'ipp': self._ipp(h, r[f'n{h}'], r['v'], r['e'], r[f'ipp{h}'])} for h in (1, 2, 3)],
+                          'ipp': self._ipp(h, r[f'n{h}'], r['v'], r['e'], r[f'ipp{h}'], r[f'k{h}'])} for h in (1, 2, 3)],
             'history': history, 'climatology': [{'month': m, **{q: round(clim[m][q], 2) for q in ('p25', 'median', 'p75', 'p90')}}
                                                 for m in range(1, 13)],
             'drivers': self.drivers(val, clim, issue, r),
@@ -88,9 +90,10 @@ class TerritoryService:
         names = self.store.names(['BR' + r['id'] for r in top]) if kind == 'municipality' else {}
         items = [{'id': 'BR' + r['id'] if kind == 'municipality' else r['id'], 'kind': kind,
                   'name': names.get('BR' + r['id']) if kind == 'municipality' else None,
-                  **self._ipp(h, r['n'], r['v'], r['e'], r['ipp']), 'ipp': round(r['ipp'], 4),
+                  **self._ipp(h, r['n'], r['v'], r['e'], r['ipp'], r[f'k{h}']), 'ipp': round(r['ipp'], 4),
                   'forecast_level': LEVELS[r[f'k{h}']], 'predicted': round(r['predicted'], 2), 'cells': r['cells'],
-                  'critical_cells': r['critical'], 'ti_name': r['ti_name'], 'lat': round(r['lat'], 4), 'lon': round(r['lon'], 4),
+                  'critical_cells': r['critical'], 'ti_name': r['ti_name'],
+                  'population': None if r['population'] is None or r['population'] != r['population'] else round(r['population']), 'lat': round(r['lat'], 4), 'lon': round(r['lon'], 4),
                   'recommendations': r['recs']} for r in top]
         return {'area': {'id': area.id, 'name': area.name, 'level': area.level}, 'horizon': h, 'granularity': kind,
                 'sort': sort, 'total': len(rows),

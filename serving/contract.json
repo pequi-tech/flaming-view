@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Contrato dos dados servidos ao back-end do Calendário do Fogo. Fonte única: o publish.py valida contra este arquivo e o back-end pode reutilizá-lo. Mudança que quebra compatibilidade = major.",
   "datasets": {
     "grid": {
@@ -266,7 +266,7 @@
     },
     "territory": {
       "path": "territory.parquet",
-      "description": "Vulnerabilidade e exposição por célula 0,05° (RD-07) e índices H3 da camada visual (A2).",
+      "description": "Vulnerabilidade e exposição por célula 0,05° (RD-07) e índices H3 da camada visual (A2). Com GHSL, E_pop = rank da população da célula.",
       "unique": [
         "cell_id"
       ],
@@ -343,6 +343,13 @@
         "h3_6": {
           "dtype": "str",
           "nullable": false
+        },
+        "pop": {
+          "dtype": "float32",
+          "nullable": true,
+          "min": 0.0,
+          "unit": "pessoas",
+          "description": "população GHSL 2025 somada na célula; nula se a release foi gerada sem GHSL"
         }
       }
     },

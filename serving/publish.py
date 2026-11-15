@@ -139,6 +139,8 @@ def check_series(totals):
 
 
 def standardize_model(name, df):
+    if name == 'territory' and 'pop' not in df:      # release sem GHSL: exposição municipal, população desconhecida
+        df = df.assign(pop=np.nan)
     if name in ('territory', 'predictions'):          # mesma regra do grid: Antártida fora
         df = df[df.cell_id >= int(cell_id(np.array([ANTARCTICA]), np.array([-180.0]))[0])]
     if name == 'areas':
