@@ -7,16 +7,16 @@ export function MapOverlays({ hz, kind, setKind, layer, busy, res, month, satell
   res: number | null; month?: string | null; satellite: boolean; setSatellite: (v: boolean) => void; compact: boolean;
 }) {
   const lyr = hz === 0 ? "history" : kind;
-  const left = compact ? 352 : 12;
+  const left = compact ? 396 : 12;
   const right = compact ? 552 : 12;
   const cuts = layer?.cuts;
   return (
     <>
-      <div className="pnl badge ov-badge" style={{ left, top: 12 }} aria-live="polite">
+      <div className="pnl badge ov-badge" style={{ left, top: 12, maxWidth: `calc(100% - ${left + right}px)` }} aria-live="polite">
         <span className={`dot${busy ? " off" : ""}`} /><b>{t(`map.badge.${lyr}`, { month: monthName(month, "short") })}</b>
         <span>{busy ? t("map.loading") : res ? t("map.hex", { r: res }) : t("map.square")}</span>
       </div>
-      <div className="pnl ctrl ov-ctrl" style={{ right, top: 12 }}>
+      <div className="pnl ctrl ov-ctrl" style={{ right, top: 52 }}>
         <span className="lbl">{t("layer.title")}</span>
         {(["forecast", "ipp"] as const).map((k) => (
           <button key={k} className="tg" role="switch" aria-checked={hz !== 0 && kind === k} disabled={hz === 0} onClick={() => setKind(k)}>
