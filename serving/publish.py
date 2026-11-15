@@ -1,8 +1,9 @@
 """Padroniza, valida e publica os dados do pipeline (infra/) para o back-end.
 
-  python publish.py ../infra/data release
+  python publish.py ../infra/data release [--partial-year 2026]
 
-Gera release/{versão}/ com grid/year=AAAA.parquet, factors.parquet, metrics.json e manifest.json,
+Gera release/{versão}/ com grid/year=AAAA.parquet, factors.parquet, metrics.json e manifest.json
+(+ predictions, territory, areas, model_metrics.json e areas/*.geojson se infra/data/model existir),
 e só então aponta release/CURRENT para a nova versão. Qualquer violação do contract.json aborta
 antes disso: o back-end nunca vê uma release pela metade ou fora do contrato.
 """
@@ -14,6 +15,8 @@ from pathlib import Path
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONTRACT = json.loads(Path(os.path.join(HERE, 'contract.json')).read_text())
 GRID, FACTORS = CONTRACT['datasets']['grid'], CONTRACT['datasets']['factors']
+MODEL = {k: CONTRACT['datasets'][k] for k in ('predictions', 'territory', 'areas')}
+PARTIAL_COVERAGE = {2026: 'Brazil'}           # RD-01: 2026 só para o Brasil
 GATES = CONTRACT['quality_gates']
 ANTARCTICA = -60.0
 ARCTIC = 75.0
@@ -135,6 +138,34 @@ def check_series(totals):
     return [f'atividade {a}->{b} mudou {v:.1f}x' for (a, b), v in zip(zip(r.index - 1, r.index), r) if v > lim or v < 1 / lim]
 
 
+def standardize_model(name, df):
+    if name in ('territory', 'predictions'):          # mesma regra do grid: Antártida fora
+        df = df[df.cell_id >= int(cell_id(np.array([ANTARCTICA]), np.array([-180.0]))[0])]
+    if name == 'areas':
+        df = df.assign(w=df.bbox.str[0], s=df.bbox.str[1], e=df.bbox.str[2], n=df.bbox.str[3]).drop(columns=['bbox', 'centroid'])
+    return cast(df, MODEL[name]).sort_values(MODEL[name]['sort'], kind='stable').reset_index(drop=True)
+
+
+def publish_model(model_dir, tmp):
+    """Previsão, território e áreas (contrato 1.1). Devolve erros; nada se o modelo não foi gerado."""
+    if not os.path.isdir(model_dir):
+        return []
+    errs, frames = [], {}
+    for name, spec in MODEL.items():
+        df = standardize_model(name, pd.read_parquet(os.path.join(model_dir, spec['path'])))
+        errs += [f'{name}: {e}' for e in check_columns(df, spec)]
+        df.to_parquet(os.path.join(tmp, spec['path']), index=False, row_group_size=200_000)
+        frames[name] = df
+    p, t = frames['predictions'], frames['territory']
+    if not np.isin(p.cell_id.to_numpy(), t.cell_id.to_numpy()).all():
+        errs.append('predictions: cell_id sem território')
+    if p.groupby('horizon').cell_id.nunique().nunique() != 1:
+        errs.append('predictions: horizontes com conjuntos de células diferentes')
+    shutil.copy(os.path.join(model_dir, 'metrics.json'), os.path.join(tmp, 'model_metrics.json'))
+    shutil.copytree(os.path.join(model_dir, 'areas'), os.path.join(tmp, 'areas'))
+    return errs
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, 'rb') as f:
@@ -143,7 +174,7 @@ def sha256(path):
     return h.hexdigest()
 
 
-def publish(infra_data, release_dir, version=None):
+def publish(infra_data, release_dir, version=None, partial_years=()):
     version = version or dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     tmp = os.path.join(release_dir, f'.{version}.tmp')
     final = os.path.join(release_dir, version)
@@ -159,10 +190,12 @@ def publish(infra_data, release_dir, version=None):
             errs += [f'grid {year}: {e}' for e in check_grid(g, year)]
             g.to_parquet(os.path.join(tmp, 'grid', f'year={year}.parquet'), index=False, row_group_size=200_000)
             totals[year] = float(g.activity.sum())
-            quality[year] = {**rep, 'rows': len(g), 'cells': int(g.cell_id.nunique()), 'activity_total': round(totals[year], 1)}
+            quality[year] = {**rep, 'rows': len(g), 'cells': int(g.cell_id.nunique()), 'activity_total': round(totals[year], 1),
+                             'months': sorted(int(m) for m in g.month.unique())}
         if not totals:
             errs.append('nenhum grid/*.parquet em ' + infra_data)
-        errs += [f'série: {e}' for e in check_series(totals)]
+        errs += [f'série: {e}' for e in check_series({y: v for y, v in totals.items() if y not in partial_years})]
+        errs += publish_model(os.path.join(infra_data, 'model'), tmp)
         f = standardize_factors(pd.read_csv(os.path.join(infra_data, 'factors.csv')))
         errs += [f'factors: {e}' for e in check_columns(f, FACTORS)]
         f.to_parquet(os.path.join(tmp, 'factors.parquet'), index=False)
@@ -176,6 +209,8 @@ def publish(infra_data, release_dir, version=None):
             'version': version, 'contract_version': CONTRACT['version'],
             'created_at': dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds'),
             'years': [min(totals), max(totals)], 'rows': sum(q['rows'] for q in quality.values()),
+            'partial_years': {str(y): {'coverage': PARTIAL_COVERAGE.get(y, 'unknown'), 'months': quality[y]['months']}
+                              for y in partial_years if y in quality},
             'quality': {'per_year': quality, 'metrics': {k: metrics[k] for k in ('mape_total_monthly_pct', 'r2_cell2_month', 'level_share')}},
             'files': files,
         }
@@ -203,7 +238,9 @@ if __name__ == '__main__':
     if sys.argv[1:2] == ['verify']:
         e = verify(sys.argv[2]); print('\n'.join(e) or 'ok'); sys.exit(bool(e))
     try:
-        path, man = publish(*sys.argv[1:3])
+        args = sys.argv[1:]
+        partial = [int(args[args.index('--partial-year') + 1])] if '--partial-year' in args else []
+        path, man = publish(args[0], args[1], partial_years=partial)
     except ContractError as e:
         sys.exit(str(e))
     print(path, man['rows'], 'linhas', man['years'])

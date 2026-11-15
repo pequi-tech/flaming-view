@@ -1,47 +1,424 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Contrato dos dados servidos ao back-end do Calendário do Fogo. Fonte única: o publish.py valida contra este arquivo e o back-end pode reutilizá-lo. Mudança que quebra compatibilidade = major.",
   "datasets": {
     "grid": {
       "path": "grid/year={year}.parquet",
       "description": "Atividade de fogo harmonizada por célula de 0,05° × mês. Uma linha por (cell_id, year, month) com pelo menos um foco. Ausência de linha = zero.",
-      "unique": ["cell_id", "year", "month"],
-      "sort": ["cell_id", "month"],
+      "unique": [
+        "cell_id",
+        "year",
+        "month"
+      ],
+      "sort": [
+        "cell_id",
+        "month"
+      ],
       "columns": {
-        "cell_id":       {"dtype": "int32",   "nullable": false, "min": 0, "max": 25919999, "description": "Índice da célula 0,05°: (round(lat*20)+1800)*7200 + (round(lon*20)+3600). Chave estável para joins."},
-        "lat":           {"dtype": "float64", "nullable": false, "min": -60.0, "max": 89.95, "unit": "graus", "description": "Latitude do canto sudoeste da célula, múltiplo de 0,05. Antártida (< -60) é descartada: sem vegetação."},
-        "lon":           {"dtype": "float64", "nullable": false, "min": -180.0, "max": 179.95, "unit": "graus", "description": "Longitude do canto sudoeste da célula, múltiplo de 0,05."},
-        "year":          {"dtype": "int16",   "nullable": false, "min": 2003, "max": 2100},
-        "month":         {"dtype": "int8",    "nullable": false, "min": 1, "max": 12},
-        "source":        {"dtype": "category", "nullable": false, "enum": ["AQUA", "SNPP", "N20"], "description": "Sensor observado naquele ano: AQUA 2003-2011, SNPP 2012-2025, N20 2026+."},
-        "detections":    {"dtype": "int32",   "nullable": false, "min": 1, "unit": "focos", "description": "Detecções brutas do sensor de origem (type=0, confiança >= nominal)."},
-        "cell_days":     {"dtype": "int32",   "nullable": false, "min": 1, "unit": "células-dia de 1 km", "description": "Células de 0,01° × dias com ao menos um foco. Sempre <= detections."},
-        "factor":        {"dtype": "float32", "nullable": false, "min": 0.0, "exclusive_min": true, "description": "Fator do sensor de origem para o S-NPP. activity = cell_days / factor. 1 nos anos SNPP."},
-        "factor_level":  {"dtype": "category", "nullable": false, "enum": ["observed", "c2", "c10", "band", "global"], "description": "Nível da hierarquia de onde veio o fator. observed = sem conversão."},
-        "activity":      {"dtype": "float32", "nullable": false, "min": 0.0, "exclusive_min": true, "unit": "células-dia equivalentes VIIRS S-NPP", "description": "VALOR HARMONIZADO. Comparável entre todos os anos e sensores."},
-        "activity_lo":   {"dtype": "float32", "nullable": false, "min": 0.0, "exclusive_min": true, "description": "Limite inferior (p10). Igual a activity quando observado."},
-        "activity_hi":   {"dtype": "float32", "nullable": false, "min": 0.0, "exclusive_min": true, "description": "Limite superior (p90). Igual a activity quando observado."}
+        "cell_id": {
+          "dtype": "int32",
+          "nullable": false,
+          "min": 0,
+          "max": 25919999,
+          "description": "Índice da célula 0,05°: (round(lat*20)+1800)*7200 + (round(lon*20)+3600). Chave estável para joins."
+        },
+        "lat": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -60.0,
+          "max": 89.95,
+          "unit": "graus",
+          "description": "Latitude do canto sudoeste da célula, múltiplo de 0,05. Antártida (< -60) é descartada: sem vegetação."
+        },
+        "lon": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -180.0,
+          "max": 179.95,
+          "unit": "graus",
+          "description": "Longitude do canto sudoeste da célula, múltiplo de 0,05."
+        },
+        "year": {
+          "dtype": "int16",
+          "nullable": false,
+          "min": 2003,
+          "max": 2100
+        },
+        "month": {
+          "dtype": "int8",
+          "nullable": false,
+          "min": 1,
+          "max": 12
+        },
+        "source": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "AQUA",
+            "SNPP",
+            "N20"
+          ],
+          "description": "Sensor observado naquele ano: AQUA 2003-2011, SNPP 2012-2025, N20 2026+."
+        },
+        "detections": {
+          "dtype": "int32",
+          "nullable": false,
+          "min": 1,
+          "unit": "focos",
+          "description": "Detecções brutas do sensor de origem (type=0, confiança >= nominal)."
+        },
+        "cell_days": {
+          "dtype": "int32",
+          "nullable": false,
+          "min": 1,
+          "unit": "células-dia de 1 km",
+          "description": "Células de 0,01° × dias com ao menos um foco. Sempre <= detections."
+        },
+        "factor": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "exclusive_min": true,
+          "description": "Fator do sensor de origem para o S-NPP. activity = cell_days / factor. 1 nos anos SNPP."
+        },
+        "factor_level": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "observed",
+            "c2",
+            "c10",
+            "band",
+            "global"
+          ],
+          "description": "Nível da hierarquia de onde veio o fator. observed = sem conversão."
+        },
+        "activity": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "exclusive_min": true,
+          "unit": "células-dia equivalentes VIIRS S-NPP",
+          "description": "VALOR HARMONIZADO. Comparável entre todos os anos e sensores."
+        },
+        "activity_lo": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "exclusive_min": true,
+          "description": "Limite inferior (p10). Igual a activity quando observado."
+        },
+        "activity_hi": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "exclusive_min": true,
+          "description": "Limite superior (p90). Igual a activity quando observado."
+        }
       }
     },
     "factors": {
       "path": "factors.parquet",
       "description": "Fatores de harmonização por nível × mês (transparência para o endpoint /method).",
-      "unique": ["link", "level", "lat", "lon", "month"],
-      "sort": ["link", "level", "lat", "lon", "month"],
+      "unique": [
+        "link",
+        "level",
+        "lat",
+        "lon",
+        "month"
+      ],
+      "sort": [
+        "link",
+        "level",
+        "lat",
+        "lon",
+        "month"
+      ],
       "columns": {
-        "link":   {"dtype": "category", "nullable": false, "enum": ["AQUA_SNPP", "N20_SNPP"]},
-        "level":  {"dtype": "category", "nullable": false, "enum": ["c2", "c10", "band", "global"]},
-        "lat":    {"dtype": "float64",  "nullable": true, "min": -90.0, "max": 90.0, "description": "Canto SW do bloco (2° em c2, 10° em c10/band). Nulo em global."},
-        "lon":    {"dtype": "float64",  "nullable": true, "min": -180.0, "max": 180.0, "description": "Canto SW do bloco. Nulo em band e global."},
-        "month":  {"dtype": "int8",     "nullable": false, "min": 1, "max": 12},
-        "factor": {"dtype": "float32",  "nullable": false, "min": 0.0, "exclusive_min": true}
+        "link": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "AQUA_SNPP",
+            "N20_SNPP"
+          ]
+        },
+        "level": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "c2",
+            "c10",
+            "band",
+            "global"
+          ]
+        },
+        "lat": {
+          "dtype": "float64",
+          "nullable": true,
+          "min": -90.0,
+          "max": 90.0,
+          "description": "Canto SW do bloco (2° em c2, 10° em c10/band). Nulo em global."
+        },
+        "lon": {
+          "dtype": "float64",
+          "nullable": true,
+          "min": -180.0,
+          "max": 180.0,
+          "description": "Canto SW do bloco. Nulo em band e global."
+        },
+        "month": {
+          "dtype": "int8",
+          "nullable": false,
+          "min": 1,
+          "max": 12
+        },
+        "factor": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "exclusive_min": true
+        }
+      }
+    },
+    "predictions": {
+      "path": "predictions.parquet",
+      "description": "Previsão M+1..M+3 por célula 0,05° (RD-06). Classe herdada da célula do modelo; contagem distribuída pela climatologia da célula fina.",
+      "unique": [
+        "cell_id",
+        "horizon"
+      ],
+      "sort": [
+        "cell_id",
+        "horizon"
+      ],
+      "columns": {
+        "cell_id": {
+          "dtype": "int32",
+          "nullable": false,
+          "min": 0,
+          "max": 25919999
+        },
+        "horizon": {
+          "dtype": "int8",
+          "nullable": false,
+          "min": 1,
+          "max": 3
+        },
+        "forecast_month": {
+          "dtype": "str",
+          "nullable": false,
+          "description": "AAAA-MM do mês previsto"
+        },
+        "class": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "baixo",
+            "normal",
+            "alto",
+            "critico"
+          ]
+        },
+        "predicted": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "unit": "células-dia equivalentes VIIRS S-NPP"
+        },
+        "lo": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0
+        },
+        "hi": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0
+        },
+        "ratio": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "description": "previsto ÷ mediana do mês-alvo na célula do modelo"
+        },
+        "n": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.05,
+          "max": 1.0,
+          "description": "componente N do IPP: rank global da razão, piso 0,05"
+        },
+        "recent_data": {
+          "dtype": "bool",
+          "nullable": false,
+          "description": "false = emissão no último mês do arquivo, não no mês fechado mais recente"
+        },
+        "model_version": {
+          "dtype": "str",
+          "nullable": false
+        },
+        "generated_at": {
+          "dtype": "str",
+          "nullable": false
+        }
+      }
+    },
+    "territory": {
+      "path": "territory.parquet",
+      "description": "Vulnerabilidade e exposição por célula 0,05° (RD-07) e índices H3 da camada visual (A2).",
+      "unique": [
+        "cell_id"
+      ],
+      "sort": [
+        "cell_id"
+      ],
+      "columns": {
+        "cell_id": {
+          "dtype": "int32",
+          "nullable": false,
+          "min": 0,
+          "max": 25919999
+        },
+        "lat": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -60.0,
+          "max": 89.95
+        },
+        "lon": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -180.0,
+          "max": 179.95
+        },
+        "v": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.05,
+          "max": 1.0
+        },
+        "e_pop": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.05,
+          "max": 1.0
+        },
+        "e_ti": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "e": {
+          "dtype": "float32",
+          "nullable": false,
+          "min": 0.05,
+          "max": 1.0
+        },
+        "ti_name": {
+          "dtype": "str",
+          "nullable": true
+        },
+        "municipality_id": {
+          "dtype": "str",
+          "nullable": true
+        },
+        "state_id": {
+          "dtype": "str",
+          "nullable": true
+        },
+        "country": {
+          "dtype": "str",
+          "nullable": true
+        },
+        "h3_4": {
+          "dtype": "str",
+          "nullable": false
+        },
+        "h3_5": {
+          "dtype": "str",
+          "nullable": false
+        },
+        "h3_6": {
+          "dtype": "str",
+          "nullable": false
+        }
+      }
+    },
+    "areas": {
+      "path": "areas.parquet",
+      "description": "País (Natural Earth) -> estado -> município (IBGE 2024, só Brasil). Geometrias em areas/*.geojson.",
+      "unique": [
+        "area_id"
+      ],
+      "sort": [
+        "area_id"
+      ],
+      "columns": {
+        "area_id": {
+          "dtype": "str",
+          "nullable": false,
+          "description": "ADM0_A3 do país; BR + código IBGE para estado e município"
+        },
+        "level": {
+          "dtype": "category",
+          "nullable": false,
+          "enum": [
+            "country",
+            "state",
+            "municipality"
+          ]
+        },
+        "name": {
+          "dtype": "str",
+          "nullable": false
+        },
+        "parent_id": {
+          "dtype": "str",
+          "nullable": true
+        },
+        "search": {
+          "dtype": "str",
+          "nullable": false,
+          "description": "nome sem acento e minúsculo"
+        },
+        "w": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -180.0,
+          "max": 180.0
+        },
+        "s": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -90.0,
+          "max": 90.0
+        },
+        "e": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -180.0,
+          "max": 180.0
+        },
+        "n": {
+          "dtype": "float64",
+          "nullable": false,
+          "min": -90.0,
+          "max": 90.0
+        },
+        "population": {
+          "dtype": "float64",
+          "nullable": true,
+          "min": 0.0
+        }
       }
     }
   },
   "quality_gates": {
     "mape_total_monthly_pct_max": 10.0,
-    "r2_cell2_month_min": 0.90,
-    "c2_level_share_min": 0.70,
+    "r2_cell2_month_min": 0.9,
+    "c2_level_share_min": 0.7,
     "months_per_complete_year": 12,
     "max_year_over_year_activity_ratio": 3.0
   }
